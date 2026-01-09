@@ -5,7 +5,7 @@ description = "An ORM-based database of metabolic information"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "sqlalchemy[asyncio]",
+    "aiosql",
     "aiosqlite",
     "pythoncyc",
 ]
