@@ -1,6 +1,23 @@
 -- name: create_schema#
 -- Prepare a metabolic reference knowledge base database schema
 
+
+-- In MetaCyc hierarchy, a reaction substrate can also be a monomer,
+-- a factor, an element or a chemical compound
+-- thus, we must consider all possibilities in this table
+-- this is probably not the most efficient way of doing such a thing,
+-- however I see no other way, for the moment;
+-- one obvious drawback being the size of this table,
+-- and the potential of information 
+CREATE TABLE chemical (
+    id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    type TEXT,
+    comment TEXT,
+    CONSTRAINT pk_chemical PRIMARY KEY (id),
+    CONSTRAINT unique_chemical UNIQUE (name)
+);
+
 CREATE TABLE compound (
     id INTEGER NOT NULL,
     name TEXT NOT NULL,
@@ -12,30 +29,31 @@ CREATE TABLE compound (
     monoisotopic_mw FLOAT,
     smiles TEXT,
     gibbs_free_energy FLOAT,
-    pka2 FLOAT,
-    CONSTRAINT pk_compound PRIMARY KEY (id)
+    CONSTRAINT pk_compound PRIMARY KEY (id),
+    CONSTRAINT unique_compound_name UNIQUE (name)
 );
 
 CREATE TABLE compound_name (
-    id INTEGER NOT NULL,
     compound_id INTEGER NOT NULL,
     name TEXT NOT NULL,
-    CONSTRAINT pk_compound_name PRIMARY KEY (id),
-    CONSTRAINT fk_compound_name_compound_id FOREIGN KEY (compound_id) REFERENCES compound (id)
+    CONSTRAINT pk_compound_name PRIMARY KEY (compound_id, name),
+    CONSTRAINT fk_compound_name_compound_id FOREIGN KEY (compound_id) REFERENCES compound (id),
+    CONSTRAINT unique_compound_name_name UNIQUE (name)
 );
 
 
 CREATE TABLE reaction (
     id INTEGER NOT NULL,
     name TEXT NOT NULL,
-    type TEXT, -- either Chemical-Reaction, Biochemical-Reaction, RNA-Reaction -- TODO: see if it is required.    ec_number TEXT,
+    type TEXT, -- either Chemical-Reaction, Biochemical-Reaction, RNA-Reaction -- TODO: see if it is required.
     comment TEXT,
+    ec_number TEXT,
     gibbs_free_energy FLOAT, -- GIBBS-0: DeltaRG°0 (?)
     physiologically_relevant BOOLEAN,
     reaction_balance_status BOOLEAN,
     reaction_physiological_direction TEXT, -- either 'right' or 'left'
     CONSTRAINT pk_reaction PRIMARY KEY (id),
-    CONSTRAINT unique_name_reaction UNIQUE (name)
+    CONSTRAINT unique_reaction_name UNIQUE (name)
 );
 
 CREATE TABLE reaction_name (
@@ -50,13 +68,14 @@ CREATE TABLE species (
     id INTEGER NOT NULL,
     name TEXT NOT NULL,
     rank TEXT NOT NULL,
-    CONSTRAINT pk_species PRIMARY KEY (id)
+    CONSTRAINT pk_species PRIMARY KEY (id),
+    CONSTRAINT unique_species_name UNIQUE (name)
 );
 
 CREATE TABLE reaction_species (
     reaction_id INTEGER NOT NULL,
     species_id INTEGER NOT NULL,
-    CONSTRAINT pk_reaction_species PRIMARY KEY (id),
+    CONSTRAINT pk_reaction_species PRIMARY KEY (reaction_id, species_id),
     CONSTRAINT fk_reaction_species_reaction_id FOREIGN KEY (reaction_id) REFERENCES reaction (id),
     CONSTRAINT fk_reaction_species_species_id FOREIGN KEY (species_id) REFERENCES species (id)
 );
@@ -64,18 +83,19 @@ CREATE TABLE reaction_species (
 CREATE TABLE reaction_substrate (
     id INTEGER NOT NULL,
     reaction_id INTEGER NOT NULL,  
-    compound_id INTEGER NOT NULL,
+    substrate_id INTEGER NOT NULL,
     stoechiometry INTEGER,
     reaction_side TEXT, -- 'left' or 'right'
     CONSTRAINT pk_reaction_substrate PRIMARY KEY (id),
     CONSTRAINT fk_reaction_substrate_reaction_id FOREIGN KEY (reaction_id) REFERENCES reaction (id),
-    CONSTRAINT fk_reaction_substrate_substrate_id FOREIGN KEY (compound_id) REFERENCES compound (id)
+    CONSTRAINT fk_reaction_substrate_substrate_id FOREIGN KEY (substrate_id) REFERENCES chemicals (id)
 );
 
 CREATE TABLE polypeptide (
     id INTEGER NOT NULL,
     name TEXT NOT NULL,
     type TEXT NOT NULL,
+    comment TEXT,
     experimental_molecular_weight FLOAT,
     molecular_weight FLOAT,
     molecular_weight_sequence FLOAT,
@@ -88,15 +108,15 @@ CREATE TABLE polypeptide (
 );
 
 CREATE TABLE polypeptide_complex_component (
-    polypeptide_id INTEGER NOT NULL,
-    component_polypeptide_id INTEGER NOT NULL,
-    stoechiometry INTEGER,
-    CONSTRAINT pk_polypeptide_complex_component (polypeptide_id, component_polypeptide_id),
-    CONSTRAINT fk_polypeptide_complex_component_polypeptide_id FOREIGN KEY (polypeptide_id) REFERENCES polypeptide (id),
-    CONSTRAINT fk_polypeptide_complex_component_component_polypeptide_id FOREIGN KEY (component_polypeptide_id) REFERENCES polypeptide (id)
+    complex_id INTEGER NOT NULL,
+    component_id INTEGER NOT NULL,
+    coefficient INTEGER,
+    CONSTRAINT pk_polypeptide_complex_component PRIMARY KEY (complex_id, component_id),
+    CONSTRAINT fk_polypeptide_complex_component_complex_id FOREIGN KEY (complex_id) REFERENCES polypeptide (id),
+    CONSTRAINT fk_polypeptide_complex_component_component_id FOREIGN KEY (component_id) REFERENCES polypeptide (id)
 );
 
-CREATE TABLE enzymatic_reaction (
+CREATE TABLE reaction_enzyme (
     reaction_id INTEGER NOT NULL,
     enzyme_id INTEGER NOT NULL,
     CONSTRAINT pk_enzymatic_reaction PRIMARY KEY (reaction_id, enzyme_id),
@@ -104,10 +124,80 @@ CREATE TABLE enzymatic_reaction (
     CONSTRAINT fk_enzymatic_reaction_enzyme_id FOREIGN KEY (enzyme_id) REFERENCES polypeptide (id)
 );
 
+CREATE TABLE pathway (
+    id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    comment TEXT,
+    CONSTRAINT pk_pathway PRIMARY KEY (id),
+    CONSTRAINT unique_pathway_name UNIQUE (name)
+);
+
+
+CREATE TABLE pathway_name (
+    pathway_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    CONSTRAINT pk_pathway_name PRIMARY KEY (pathway_id, name),
+    CONSTRAINT fk_pathway_name_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id)
+);
+
+CREATE TABLE pathway_variant (
+    group_id INTEGER NOT NULL,
+    pathway_id INTEGER NOT NULL,
+    CONSTRAINT pk_pathway_variant PRIMARY KEY (group_id, pathway_id),
+    CONSTRAINT fk_pathway_variant_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id)
+);
+
+CREATE TABLE pathway_reaction_direction (
+    pathway_id INTEGER NOT NULL,
+    reaction_id INTEGER NOT NULL,
+    reaction_direction TEXT NOT NULL, -- "right" for "left-to-right" or "left" for "right-to-left"
+    CONSTRAINT pk_pathway_reaction_layout PRIMARY KEY (pathway_id, reaction_id),
+    CONSTRAINT fk_pathway_reaction_layout_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id),
+    CONSTRAINT fk_pathway_reaction_layout_reaction_id FOREIGN KEY (reaction_id) REFERENCES reaction (id)
+);
+
+-- A pathway reaction graph
+--
+-- represents the arcs wihin a directed reaction graph of a given pathway
+CREATE TABLE pathway_reaction_graph (
+    pathway_id INTEGER NOT NULL,
+    left_reaction_id INTEGER NOT NULL,
+    right_reaction_id INTEGER NOT NULL,
+    CONSTRAINT pk_pathway_reaction_layout PRIMARY KEY (pathway_id, left_reaction_id, right_reaction_id),
+    CONSTRAINT fk_pathway_reaction_layout_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id),
+    CONSTRAINT fk_pathway_reaction_layout_left_reaction_id FOREIGN KEY (left_reaction_id) REFERENCES reaction (id),
+    CONSTRAINT fk_pathway_reaction_layout_right_reaction_id FOREIGN KEY (right_reaction_id) REFERENCES reaction (id)
+); 
+
+CREATE TABLE pathway_key_reaction (
+    pathway_id INTEGER NOT NULL,
+    reaction_id INTEGER NOT NULL,
+    CONSTRAINT pk_pathway_key_reaction PRIMARY KEY (pathway_id, reaction_id),
+    CONSTRAINT fk_pathway_key_reaction_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id),
+    CONSTRAINT fk_pathway_key_reaction_reaction_id FOREIGN KEY (reaction_id) REFERENCES reaction (id) 
+);
+
+CREATE TABLE pathway_species (
+    pathway_id INTEGER NOT NULL,
+    species_id INTEGER NOT NULL,
+    CONSTRAINT pk_pathway_species PRIMARY KEY (pathway_id, species_id),
+    CONSTRAINT fk_pathway_species_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id),
+    CONSTRAINT fk_pathway_species_species_id FOREIGN KEY (species_id) REFERENCES taxon (id)
+);
+
+CREATE TABLE pathway_taxonomic_range (
+    pathway_id INTEGER NOT NULL,
+    taxon_id INTEGER NOT NULL,
+    CONSTRAINT pk_pathway_taxonomic_range PRIMARY KEY (pathway_id, taxon_id),
+    CONSTRAINT fk_pathway_taxonomic_range_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id),
+    CONSTRAINT fk_pathway_taxonomic_range_taxon_id FOREIGN KEY (taxon_id) REFERENCES taxon (id)
+);
+
 CREATE TABLE ec_number (
     id INTEGER NOT NULL,
     name TEXT NOT NULL,
     description TEXT,
-    CONSTRAINT pk_ec_number PRIMARY KEY (id)
+    CONSTRAINT pk_ec_number PRIMARY KEY (id),
+    CONSTRAINT unique_ec_number_name UNIQUE (name)
 );
 
