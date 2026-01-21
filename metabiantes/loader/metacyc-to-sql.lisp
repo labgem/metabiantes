@@ -454,8 +454,8 @@ VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide
                (dump-polypeptides)
                (dump-complexes)
                (dump-reactions)
-             ;  (dump-enzymes)
-             ;  (dump-pathways)
+               (dump-enzymes)
+               (dump-pathways)
               ))
 
 (defun write-to-file (file content)
