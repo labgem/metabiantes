@@ -47,9 +47,11 @@
 (defun format-sql-literal (value)
   "Return the VALUE if any, else the literal value \"NULL\"."
   (cond ((null value) "NULL")
+        ((equal 'OCELOT-GFP::FRAME (type-of value)) (format-sql-literal (symbol-name (get-frame-name value))))
         ((numberp value) (remove-double-suffix (format nil "~D" value))) 
         ((stringp value) (format nil "'~A'" (escape-single-quote value)))
         ((listp value) (format nil "'~{~A~^ ~}'" value))
+        ((equal 'symbol (type-of value)) (format-sql-literal (symbol-name value)))
         (t (format nil "'~A'" (escape-single-quote value)))))
 
 
@@ -71,6 +73,13 @@
           table
           column))
 
+
+(defun format-frame (frame)
+  (cond ((stringp frame) frame)
+        ((equal 'OCELOT-GFP::FRAME (type-of frame))
+         (symbol-name (get-frame-name frame)))
+        (t (symbol-name frame))))
+
 ;;
 ;; Dump the MetaCyc database
 ;; 
@@ -84,11 +93,8 @@
 (defun all-chemicals ()
   (get-class-all-instances '|Chemicals|))
 
-
 (defun get-substrate-name (substrate)
-  (if (stringp substrate)
-      substrate
-      (symbol-name (get-frame-name substrate))))
+  (format-frame substrate))
 
 
 (defun dump-substrates ()
@@ -110,7 +116,9 @@
           "NULL" ; type TODO
           (format-sql-literal (get-slot-value compound 'comment)) ; comment
           (format-sql-literal (get-slot-value compound 'atomic-number)) ; atomic number
-          (format-sql-literal (get-slot-value compound 'atom-charges)) ; atom charges
+          (format-sql-literal (if (listp (get-slot-value compound 'atom-charges))
+                                  (car (get-slot-value compound 'atom-charges))
+                                  nil)) ; atom charges
           (format-sql-literal (get-slot-value compound 'smiles)) ; SMILES
           (format-sql-literal (get-slot-value compound 'molecular-weight)) ; molecular weight
           (format-sql-literal (get-slot-value compound 'monoisotopic-mw)) ; monoisotopic mass
@@ -141,8 +149,8 @@
 
 (defun format-polypeptide-insertion (polypeptide)
   "Format INSERT INTO instruction for a polypeptide."
-  ;(format nil "INSERT INTO polypeptide (name, type, comment, experimental_molecular_weight, molecular_weight, molecular_weight_sequence, half_life, gene, neidhardt_spot_number, atom_charges, isoelectric_point) ~%VALUES ~% (~A);~%"
-  (format nil "INSERT INTO polypeptide (name, type, comment, experimental_molecular_weight, molecular_weight, molecular_weight_sequence, half_life, gene, atom_charges, isoelectric_point) ~%VALUES ~% (~A);~%"
+  (format nil "INSERT INTO polypeptide (name, type, comment, experimental_molecular_weight, molecular_weight, molecular_weight_sequence, half_life, gene, neidhardt_spot_number, atom_charges, isoelectric_point) ~%VALUES ~% (~A);~%"
+  ;(format nil "INSERT INTO polypeptide (name, type, comment, experimental_molecular_weight, molecular_weight, molecular_weight_sequence, half_life, gene, atom_charges, isoelectric_point) ~%VALUES ~% (~A);~%"
           (format nil "~A, ~A, ~A, ~A, ~A, ~A, ~A, ~A, ~A, ~A, ~A"
                   (format-sql-literal (symbol-name (get-frame-name polypeptide)))
                   (format-sql-literal (format-polypeptide-type polypeptide))
@@ -151,9 +159,13 @@
                   (format-sql-literal (get-slot-value polypeptide 'molecular-weight-exp))
                   (format-sql-literal (get-slot-value polypeptide 'molecular-weight))
                   (format-sql-literal (get-slot-value polypeptide 'half-life))
-                  (format-sql-literal (symbol-name (get-frame-name (get-slot-value polypeptide 'gene))))
-                  ; (format-sql-literal (get-slot-value polypeptide 'neidhardt-spot-number))
-                  (format-sql-literal (get-slot-value polypeptide 'atom-charges))
+                  (format-sql-literal (get-slot-value polypeptide 'gene))
+                  (format-sql-literal (if (listp (get-slot-value polypeptide 'neidhardt-spot-number))
+                                          (car (get-slot-value polypeptide 'neidhardt-spot-number))
+                                          nil))
+                  (format-sql-literal (if (listp (get-slot-value polypeptide 'atom-charges))
+                                          (car (get-slot-value polypeptide 'atom-charges))
+                                          nil))
                   (format-sql-literal (get-slot-value polypeptide 'pi)))))
 
 
@@ -229,13 +241,15 @@ VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide
          (reaction-type? reaction :transport) "transport")))
 
 
+
 (defun reaction-insertion (reaction)
-  (format nil "INSERT INTO reaction (name, type, comment, gibbs_free_energy, physiologically_relevant, reaction_balance_status, reaction_physiological_direction)
-VALUES ('~A', ~A, ~A, ~A, ~A, ~A, ~A);~%"
+  (format nil "INSERT INTO reaction (name, type, comment, spontaneous, ec_number, gibbs_free_energy, physiologically_relevant, reaction_balance_status, reaction_physiological_direction)
+VALUES ('~A', ~A, ~A, ~A, ~A, ~A, ~A, ~A, ~A);~%"
           (get-frame-name reaction)
           (format-sql-literal (get-reaction-type reaction))
           (format-sql-literal (get-slot-value reaction 'comment))
-          (format-sql-literal (symbol-name (get-slot-value reaction 'ec-number)))
+          (format-sql-boolean (get-slot-value reaction 'spontaneous?))
+          (format-sql-literal (get-slot-value reaction 'ec-number))
           (format-sql-literal (get-slot-value reaction 'gibbs-0)) 
           (format-sql-boolean (get-slot-value reaction 'physiologically-relevant))
           (format-sql-boolean (get-slot-value reaction 'reaction-balance-status))
@@ -362,43 +376,43 @@ VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide
   "TODO"
   )
 
-(defun format-one-pathway-key-reaction-insertion (pathway reaction)
+(defun format-one-pathway-key-reaction-insertion (pathway-name reaction-name)
   (insert-into-by-foreign-key
    "pathway_key_reaction"
    "pathway"
    "pathway_id"
-   (symbol-name (get-frame-name pathway))
+   pathway-name
    "reaction"
    "reaction_id"
-   (symbol-name (get-frame-name reaction))))
+   reaction-name))
 
 
 (defun format-pathway-key-reaction-insertion (pathway)
   (let ((key-reactions (get-slot-value pathway 'key-reactions)))
-        (cond ((null key-reactions) "")
-              (listp key-reactions) (format nil "~{~A~}"
-                                             (loop for reaction in key-reactions
-                                                   collect (format-one-pathway-key-reaction-insertion pathway reaction)))
-              (t (format-one-pathway-key-reaction-insertion pathway key-reactions)))))
+    (cond ((null key-reactions) "")
+          ((listp key-reactions) (format nil "~{~A~}"
+                                        (loop for reaction in key-reactions
+                                              collect (format-one-pathway-key-reaction-insertion (format-frame pathway) (format-frame reaction)))))
+          (t (format-one-pathway-key-reaction-insertion (format-frame pathway) (format-frame key-reactions))))))
 
 
-(defun format-one-pathway-reaction-insertion (pathway reaction)
+(defun format-one-pathway-reaction-insertion (pathway-name reaction-name)
   (insert-into-by-foreign-key
    "pathway_reaction"
    "pathway"
    "pathway_id"
-   (symbol-name (get-frame-name pathway))
+   pathway-name
    "reaction"
    "reaction_id"
-   (symbol-name (get-frame-name reaction))))
+   reaction-name))
 
 
 (defun format-pathway-reactions-insertion (pathway)
   (let ((reactions (get-slot-value pathway 'reactions))
         (cond ((null reactions) "")
               ((listp reactions) (format nil "~{~A~}"
-                                             (loop for reaction in reactions
-                                                   collect (format-one-pathway-reaction-insertion pathway reaction))))
+                                         (loop for reaction in reactions
+                                               collect (format-one-pathway-reaction-insertion pathway reaction))))
               (t (format-one-pathway-reaction-insertion pathway reactions))))))
 
 
@@ -406,9 +420,9 @@ VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide
   (concatenate 'string
                (format-pathway-insertion pathway)
                (format-pathway-key-reaction-insertion pathway)
-               ; (format-pathway-species-insertion pathway)
-               (format-pathway-taxonomic-range-insertion pathway)
-               (format-pathway-reactions-insertion pathway)
+                                        ; (format-pathway-species-insertion pathway)
+               ;;(format-pathway-taxonomic-range-insertion pathway)
+               ;;(format-pathway-reactions-insertion pathway)
                ;; TODO (format-pathway-graph pathway)
                ))
 
@@ -424,30 +438,25 @@ VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide
                        (loop for pathway in (all-pathways)
                              for variants = (variants-of-pathway pathway)
                              when (not (null variants))
-                             collect (format-pathway-variants pathway variants)))
+                               collect (format-pathway-variants pathway variants)))
                                         ; Continue with super-pathways
                (format nil "~{~A~^~%~}~%"
                        (loop for pathway in (all-pathways)
                              for sub-pathways = (get-slot-value pathway 'sub-pathways)
                              when (not (null sub-pathways))
-                             collect (format-pathway-sub-pathways pathway sub-pathways)))
+                               collect (format-pathway-sub-pathways pathway sub-pathways)))
                ))
 
 (defun dump-all ()
   (concatenate 'string
-               (create-index "reaction" "name")
-               (create-index "substrate" "name")
-               (create-index "polypeptide" "name")
-               (create-index "pathway" "name")
                (dump-substrates)
                (dump-compounds)
                (dump-polypeptides)
                (dump-complexes)
                (dump-reactions)
-               (dump-enzymes)
-               (dump-pathways)
-               ))
-
+             ;  (dump-enzymes)
+             ;  (dump-pathways)
+              ))
 
 (defun write-to-file (file content)
   (with-open-file (stream file
@@ -458,7 +467,7 @@ VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide
 
 
 (defun main ()
-  (write-to-file "dump.sql" (dump-all)))
+ (write-to-file "dump.sql" (dump-all)))
 
 
 (main)

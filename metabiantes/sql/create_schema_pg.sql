@@ -38,6 +38,7 @@ CREATE TABLE reaction (
     name TEXT NOT NULL,
     type TEXT, -- either Chemical-Reaction, Biochemical-Reaction, RNA-Reaction -- TODO: see if it is required.
     comment TEXT,
+    spontaneous BOOLEAN,
     ec_number TEXT,
     gibbs_free_energy FLOAT, -- GIBBS-0: DeltaRG°0 (?)
     physiologically_relevant BOOLEAN,
@@ -211,4 +212,7 @@ CREATE TABLE ec_number (
 );
 
 -- TABLE secondary index
--- TODO
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reaction_name ON reaction (name);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_substrate_name ON substrate (name);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_polypeptide_name ON polypeptide (name);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pathway_name ON pathway (name);
