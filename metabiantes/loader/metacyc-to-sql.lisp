@@ -23,7 +23,7 @@
 ;;
 
 (defun remove-double-suffix (text)
-  "Remove 'd0' suffix from the string representation of a double."
+  "Remove 'd0' suffix from the string representation of a double precision float."
   (if (< (length text) 3)
       text
       (let* ((prefix (subseq text 0 (- (length text) 2)))
@@ -79,7 +79,11 @@
   (cond ((stringp frame) frame)
         ((equal 'OCELOT-GFP::FRAME (type-of frame))
          (symbol-name (get-frame-name frame)))
-        (t (symbol-name frame))))
+        ((symbolp frame) (symbol-name frame))
+        (t (progn
+           (message "Error: format-frame type not handled")
+           ()
+           ))))
 
 ;;
 ;; Dump the MetaCyc database
@@ -167,7 +171,7 @@
                   (format-sql-literal (get-slot-value polypeptide 'pi)))))
 
 
-(defun all-polypeptide ()
+(defun all-polypeptides ()
   "List instances of class 'Proteins' from the Ocelot database."
   (get-class-all-instances '|Proteins|))
 
@@ -175,7 +179,7 @@
 (defun dump-polypeptides ()
   "Format INSERT INTO instruction for all polypeptide."
   (format-list-of-lines
-   (loop for polypeptide in (all-polypeptide)
+   (loop for polypeptide in (all-polypeptides)
          collect (format-polypeptide-insertion polypeptide))))
 
 
@@ -331,7 +335,6 @@ VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide
   (format nil "INSERT INTO pathway (name) VALUES ('~A');~%"
           (get-frame-name pathway)))
 
-
 (defun format-pathway-variant (pathway variant)
   "Format an INSERT INTO for a VARIANT pathway of pathway PATHWAY."
   (insert-into-by-foreign-key "pathway_variant" "pathway" pathway "pathway_id" "pathway" variant "variant_id"))
@@ -389,7 +392,7 @@ It will remote TAX- or ORG- prefix and parse the number as integer."
 
 (defun format-all-pathway-taxonomic-range-insertion (pathway)
   "Format all taxonomic ranges of PATHWAY."
-  (let ((tax-id (get-slot-value pathway 'taxonomic-range)))
+  (let ((tax-id (get-slot-values pathway 'taxonomic-range)))
     (cond ((null tax-id) "")
           ((listp tax-id) 
            (format-list-of-lines (loop for id in tax-id
@@ -423,12 +426,16 @@ It will remote TAX- or ORG- prefix and parse the number as integer."
 
 (defun format-all-pathway-key-reaction-insertion (pathway)
   "Format all INSERT INTO instructions for key reactions of a PATHWAY."
-  (let ((key-reactions (get-slot-value pathway 'key-reactions)))
+  (let ((key-reactions (get-slot-values pathway 'key-reactions)))
     (cond ((null key-reactions) "")
           ((listp key-reactions) (format-list-of-lines
                                   (loop for reaction in key-reactions
-                                        collect (format-one-pathway-key-reaction-insertion (format-frame pathway) (format-frame reaction)))))
-          (t (format-one-pathway-key-reaction-insertion (format-frame pathway) (format-frame key-reactions))))))
+                                        collect (format-one-pathway-key-reaction-insertion
+                                                 (format-frame pathway)
+                                                 (format-frame reaction)))))
+          (t (format-one-pathway-key-reaction-insertion
+              (format-frame pathway)
+              (format-frame key-reactions))))))
 
 
 (defun any (list)
@@ -453,7 +460,6 @@ It will remote TAX- or ORG- prefix and parse the number as integer."
              for super-class-name = (get-frame-name super-class)
              collect (equal '|Reactions| super-class-name))))
 
-
 (defun format-one-pathway-reaction-insertion (pathway reaction)
   "Format one INSERT INTO instruction for a REACTION of a PATHWAY."
   (if (is-reaction reaction)
@@ -470,7 +476,7 @@ It will remote TAX- or ORG- prefix and parse the number as integer."
                                         
 (defun format-pathway-reactions-insertion (pathway)
   "Format all pathway reactions insertion of PATHWAY."
-  (let ((reactions (get-slot-value pathway 'reaction-list)))
+  (let ((reactions (reactions-of-pathway pathway)))
     (cond ((null reactions) "")
           ((listp reactions) (format-list-of-lines
                               (loop for reaction in reactions
@@ -485,7 +491,7 @@ It will remote TAX- or ORG- prefix and parse the number as integer."
   "Dump one pathway (pathway, key reactions, taxonomic-range, reactions)."
   (concatenate 'string
                (format-pathway-insertion pathway)
-               (format-pathway-key-reaction-insertion pathway)
+               (format-all-pathway-key-reaction-insertion pathway)
                                         ; TODO (format-pathway-species-insertion pathway)
                (format-all-pathway-taxonomic-range-insertion pathway)
                (format-pathway-reactions-insertion pathway)
@@ -509,7 +515,7 @@ It will remote TAX- or ORG- prefix and parse the number as integer."
                                         ; Continue with super-pathways
                (format-list-of-lines
                 (loop for pathway in (all-pathways)
-                      for sub-pathways = (get-slot-value pathway 'sub-pathways)
+                      for sub-pathways = (get-slot-values pathway 'sub-pathways)
                       when (not (null sub-pathways))
                         collect (format-pathway-sub-pathways pathway sub-pathways)))
                ))
