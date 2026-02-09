@@ -330,6 +330,10 @@ VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide
 
 ;; Finally, deal with the pathways
 
+; TODO
+;(defun get-pathway-type (pathway)
+;  (cond (())))
+
 (defun format-pathway-insertion (pathway)
   "Format an INSERT INTO instruction for a pathway."
   (format nil "INSERT INTO pathway (name) VALUES ('~A');~%"
@@ -349,6 +353,7 @@ VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide
                                     (symbol-name (get-frame-name pathway))
                                     (symbol-name (get-frame-name variant)))))
       (format-pathway-variant pathway variants))) ; variants is a single string
+
 
 (defun format-pathway-sub-pathway (pathway subpathway)
   "Format an INSERT INTO instruction for a SUBPATHWAY  of a PATHWAY"
@@ -460,20 +465,21 @@ It will remote TAX- or ORG- prefix and parse the number as integer."
              for super-class-name = (get-frame-name super-class)
              collect (equal '|Reactions| super-class-name))))
 
-(defun format-one-pathway-reaction-insertion (pathway reaction)
+(defun format-one-pathway-reaction-insertion (pathway reaction direction)
   "Format one INSERT INTO instruction for a REACTION of a PATHWAY."
   (if (is-reaction reaction)
-      (insert-into-by-foreign-key
-       "pathway_reaction"
-       "pathway"
-       "pathway_id"
-       (get-frame-name pathway)
-       "reaction"
-       "reaction_id"
-       (get-frame-name reaction))
+      (format nil "INSERT INTO pathway_reaction (pathway_id, reaction_id, reaction_direction)
+VALUES ((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM reaction WHERE name = '~A'), '~A');"
+              (get-frame-name pathway)
+              (get-frame-name reaction)
+              (direction))
       "" ))
                                         ; do not dump this reaction - pathway relation when reaction is not a member of reaction class
-                                        
+
+(defun format-pathway-reaction-direction (pathway reaction)
+  
+  )
+
 (defun format-pathway-reactions-insertion (pathway)
   "Format all pathway reactions insertion of PATHWAY."
   (let ((reactions (reactions-of-pathway pathway)))
@@ -482,7 +488,8 @@ It will remote TAX- or ORG- prefix and parse the number as integer."
                               (loop for reaction in reactions
                                     collect (format-one-pathway-reaction-insertion
                                              pathway
-                                             reaction))))
+                                             reaction
+                                             (format-pathway-reaction-direction pathway reaction)))))
           (t
            (format-one-pathway-reaction-insertion pathway
                                                   reactions)))))
@@ -545,5 +552,5 @@ It will remote TAX- or ORG- prefix and parse the number as integer."
   (write-to-file "dump.sql" (dump-all)))
 
 
-(main)
+; (main)
 
