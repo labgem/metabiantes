@@ -338,8 +338,6 @@ VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide
                 (format-enzyme-insertion reaction enzyme))))))
 
 ;; Finally, deal with the pathways
-
-
 (defun format-pathway-insertion (pathway)
   "Format an INSERT INTO instruction for a pathway."
   (format nil "INSERT INTO pathway (name) VALUES ('~A');~%"
