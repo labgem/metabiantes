@@ -347,7 +347,7 @@ VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide
 
 
 (defun format-pathway-variants (pathway variants)
-  "Format all INSERT INTO for every VARIANTS of PATHWAY."
+"Format all INSERT INTO for every VARIANTS of PATHWAY."
   (if (listp variants)
       (format nil "INSERT INTO pathway_variant (pathway_id, variant_id) VALUES ~% ~{~A~^,~%~};~%"
               (loop for variant in variants
