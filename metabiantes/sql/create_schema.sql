@@ -66,10 +66,9 @@ CREATE TABLE species (
 
 CREATE TABLE reaction_species (
     reaction_id INTEGER NOT NULL,
-    species_id INTEGER NOT NULL,
-    CONSTRAINT pk_reaction_species PRIMARY KEY (reaction_id, species_id),
+    taxon_id INTEGER NOT NULL,
+    CONSTRAINT pk_reaction_species PRIMARY KEY (reaction_id, taxon_id),
     CONSTRAINT fk_reaction_species_reaction_id FOREIGN KEY (reaction_id) REFERENCES reaction (id),
-    CONSTRAINT fk_reaction_species_species_id FOREIGN KEY (species_id) REFERENCES species (id)
 );
 
 CREATE TABLE reaction_substrate (
@@ -119,6 +118,7 @@ CREATE TABLE reaction_enzyme (
 CREATE TABLE pathway (
     id INTEGER NOT NULL,
     name TEXT NOT NULL,
+   -- type TEXT NOT NULL,
     comment TEXT,
     CONSTRAINT pk_pathway PRIMARY KEY (id),
     CONSTRAINT unique_pathway_name UNIQUE (name)
@@ -132,15 +132,6 @@ CREATE TABLE pathway_name (
     CONSTRAINT fk_pathway_name_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id)
 );
 
-
-CREATE TABLE pathway_reaction_direction (
-    pathway_id INTEGER NOT NULL,
-    reaction_id INTEGER NOT NULL,
-    reaction_direction TEXT NOT NULL, -- "right" for "left-to-right" or "left" for "right-to-left"
-    CONSTRAINT pk_pathway_reaction_layout PRIMARY KEY (pathway_id, reaction_id),
-    CONSTRAINT fk_pathway_reaction_layout_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id),
-    CONSTRAINT fk_pathway_reaction_layout_reaction_id FOREIGN KEY (reaction_id) REFERENCES reaction (id)
-);
 
 CREATE TABLE pathway_sub_pathway (
     super_pathway_id INTEGER NOT NULL,
@@ -166,6 +157,7 @@ CREATE TABLE pathway_reaction_graph (
 CREATE TABLE pathway_reaction (
     pathway_id INTEGER NOT NULL,
     reaction_id INTEGER NOT NULL,
+    reaction_direction TEXT, -- "right" for "left-to-right" or "left" for "right-to-left"
     CONSTRAINT pk_pathway_reaction PRIMARY KEY (pathway_id, reaction_id),
     CONSTRAINT fk_pathway_reaction_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id),
     CONSTRAINT fk_pathway_reaction_reaction_id FOREIGN KEY (reaction_id) REFERENCES reaction (id) 
@@ -201,6 +193,22 @@ CREATE TABLE pathway_variant (
     CONSTRAINT pk_pathway_variant PRIMARY KEY (pathway_id, variant_id),
     CONSTRAINT fk_pathway_variant_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id),
     CONSTRAINT fk_pathway_variant_variant_id FOREIGN KEY (variant_id) REFERENCES pathway (id)
+);
+
+CREATE TABLE pathway_variant_group (
+    variant_group_id INTEGER NOT NULL,
+    variant_id INTEGER NOT NULL,
+    CONSTRAINT pk_pathway_variant_group PRIMARY KEY (variant_group_id, variant_id),
+    CONSTRAINT fk_pathway_variant_group_variant_id FOREIGN KEY (variant_id) REFERENCES pathway (id)
+);
+
+CREATE TABLE pathway_ontology (
+    pathway_id INTEGER NOT NULL,
+    path INTEGER NOT NULL,
+    depth INTEGER NOT NULL,
+    pathway_class TEXT NOT NULL,
+    CONSTRAINT pk_pathway_ontology PRIMARY KEY (pathway_id, path, depth, pathway_class),
+    CONSTRAINT fk_pathway_ontology_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id)
 );
 
 CREATE TABLE ec_number (

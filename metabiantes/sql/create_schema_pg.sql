@@ -181,10 +181,9 @@ CREATE TABLE pathway_key_reaction (
 
 CREATE TABLE pathway_species (
     pathway_id SERIAL NOT NULL,
-    species_id SERIAL NOT NULL,
-    CONSTRAINT pk_pathway_species PRIMARY KEY (pathway_id, species_id),
+    taxon_id INTEGER NOT NULL,
+    CONSTRAINT pk_pathway_species PRIMARY KEY (pathway_id, taxon_id),
     CONSTRAINT fk_pathway_species_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id)
-    -- CONSTRAINT fk_pathway_species_species_id FOREIGN KEY (species_id) REFERENCES taxon (id) // taxon table does not exist, at least for now.
 );
 
 CREATE TABLE pathway_taxonomic_range (
@@ -201,6 +200,22 @@ CREATE TABLE pathway_variant (
     CONSTRAINT pk_pathway_variant PRIMARY KEY (pathway_id, variant_id),
     CONSTRAINT fk_pathway_variant_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id),
     CONSTRAINT fk_pathway_variant_variant_id FOREIGN KEY (variant_id) REFERENCES pathway (id)
+);
+
+CREATE TABLE pathway_variant_group (
+    variant_group_id SERIAL NOT NULL,
+    variant_id SERIAL NOT NULL,
+    CONSTRAINT pk_pathway_variant_group PRIMARY KEY (variant_group_id, variant_id),
+    CONSTRAINT fk_pathway_variant_group_variant_id FOREIGN KEY (variant_id) REFERENCES pathway (id)
+);
+
+CREATE TABLE pathway_ontology (
+    pathway_id SERIAL NOT NULL,
+    path INTEGER NOT NULL,
+    depth INTEGER NOT NULL,
+    pathway_class TEXT NOT NULL,
+    CONSTRAINT pk_pathway_ontology PRIMARY KEY (pathway_id, path, depth, pathway_class),
+    CONSTRAINT fk_pathway_ontology_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id)
 );
 
 CREATE TABLE ec_number (

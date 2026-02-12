@@ -18,6 +18,8 @@
 
 (select-organism :org-id 'meta)
 
+(load "flatten-ontology-graph")
+
 ;;
 ;; Generic SQL related functions
 ;;
@@ -330,6 +332,10 @@ VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide
 
 ;; Finally, deal with the pathways
 
+; TODO
+;(defun get-pathway-type (pathway)
+;  (cond (())))
+
 (defun format-pathway-insertion (pathway)
   "Format an INSERT INTO instruction for a pathway."
   (format nil "INSERT INTO pathway (name) VALUES ('~A');~%"
@@ -349,6 +355,7 @@ VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide
                                     (symbol-name (get-frame-name pathway))
                                     (symbol-name (get-frame-name variant)))))
       (format-pathway-variant pathway variants))) ; variants is a single string
+
 
 (defun format-pathway-sub-pathway (pathway subpathway)
   "Format an INSERT INTO instruction for a SUBPATHWAY  of a PATHWAY"
@@ -400,17 +407,21 @@ It will remote TAX- or ORG- prefix and parse the number as integer."
           (t (format-one-pathway-taxonomic-range-insertion pathway tax-id)))))
 
 
-(defun format-one-pathway-species-insertion (pathway species)
-                                        ; TODO not yet implemented in the schema
+(defun format-one-pathway-species-insertion (pathway tax-id)
+  "Format an INSERT INTO instruction for the species where a pathway has been described."
   (format nil "INSERT INTO pathway_species (pathway_id, species_id) VALUES
-((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM taxon WHERE name = '~A'));"
+((SELECT id FROM pathway WHERE name = '~A'), ~D);~%"
           (get-frame-name pathway)
-          (get-frame-name species)
-          ))
+          (format-sql-literal (extract-taxonomic-id-number tax-id))))
 
-(defun format-pathway-graph (pathway)
-  "TODO"
-  )
+(defun format-all-pathway-species-insertion (pathway)
+  "Format all species of PATHWAY."
+  (let ((tax-id (get-slot-values pathway 'species)))
+    (cond ((null tax-id) "")
+          ((listp tax-id) 
+           (format-list-of-lines (loop for id in tax-id
+                                       collect (format-one-pathway-species-insertion pathway id))))
+          (t (format-one-pathway-species-insertion pathway tax-id)))))
 
 (defun format-one-pathway-key-reaction-insertion (pathway-name reaction-name)
   "Format an INSERT INTO instruction for a key reaction REACTION-NAME OF pathway PATHWAY-NAME."
@@ -460,20 +471,21 @@ It will remote TAX- or ORG- prefix and parse the number as integer."
              for super-class-name = (get-frame-name super-class)
              collect (equal '|Reactions| super-class-name))))
 
-(defun format-one-pathway-reaction-insertion (pathway reaction)
+(defun format-one-pathway-reaction-insertion (pathway reaction direction)
   "Format one INSERT INTO instruction for a REACTION of a PATHWAY."
   (if (is-reaction reaction)
-      (insert-into-by-foreign-key
-       "pathway_reaction"
-       "pathway"
-       "pathway_id"
-       (get-frame-name pathway)
-       "reaction"
-       "reaction_id"
-       (get-frame-name reaction))
+      (format nil "INSERT INTO pathway_reaction (pathway_id, reaction_id, reaction_direction)
+VALUES ((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM reaction WHERE name = '~A'), '~A');"
+              (get-frame-name pathway)
+              (get-frame-name reaction)
+              direction)
       "" ))
                                         ; do not dump this reaction - pathway relation when reaction is not a member of reaction class
-                                        
+
+(defun format-pathway-reaction-direction (pathway reaction)
+  ; TODO
+  )
+
 (defun format-pathway-reactions-insertion (pathway)
   "Format all pathway reactions insertion of PATHWAY."
   (let ((reactions (reactions-of-pathway pathway)))
@@ -482,7 +494,8 @@ It will remote TAX- or ORG- prefix and parse the number as integer."
                               (loop for reaction in reactions
                                     collect (format-one-pathway-reaction-insertion
                                              pathway
-                                             reaction))))
+                                             reaction
+                                             (format-pathway-reaction-direction pathway reaction)))))
           (t
            (format-one-pathway-reaction-insertion pathway
                                                   reactions)))))
@@ -492,12 +505,73 @@ It will remote TAX- or ORG- prefix and parse the number as integer."
   (concatenate 'string
                (format-pathway-insertion pathway)
                (format-all-pathway-key-reaction-insertion pathway)
-                                        ; TODO (format-pathway-species-insertion pathway)
+               (format-all-pathway-species-insertion pathway)
                (format-all-pathway-taxonomic-range-insertion pathway)
                (format-pathway-reactions-insertion pathway)
                                         ; TODO (format-pathway-graph pathway)
                ))
 
+
+(defun format-pathway-ontology-insertion (pathway path depth pathway_class)
+  "Format an INSERT INTO instruction for an item in the ontology of a PATHWAY."
+  (format nil "INSERT INTO pathway_ontology (pathway_id, path, depth, pathway_class)
+VALUES ((SELECT id FROM pathway WHERE name = ~A), ~A, ~A, ~A);"
+          (format-sql-literal (format-frame pathway))
+          (format-sql-literal path)
+          (format-sql-literal depth)
+          (format-sql-literal (format-frame pathway_class))))
+
+
+(defun dump-pathway-ontology (pathway)
+  "Dump a flattened ontology directed acyclic graph for the PATHWAY."
+  (format-list-of-lines
+   (loop for ontology-level-list in (flatten-ontology-graph (build-ontology-graph pathway)
+                                                            (get-frame-name pathway))
+         for pathway = (nth 0 ontology-level-list)
+         for depth = (nth 1 ontology-level-list)
+         for path-enumeration = (nth 2 ontology-level-list)
+         for pathway_class = (nth 3 ontology-level-list)
+         collect (format-pathway-ontology-insertion pathway path-enumeration depth pathway_class))))
+
+(defun group-by-pathway-variant-groups (pathways)
+  "Make a hashtable with group id to variants id for pathway variant groups."
+  (let ((group-count 0)
+        (variant-to-variant-group (make-hash-table))
+        (variant-group-to-variants (make-hash-table)))
+    (loop for pathway in pathways
+          do (progn
+               (multiple-value-bind
+                     (variant-group variant-group-exists)
+                   (gethash pathway variant-to-variant-group)
+                 (when (not variant-group-exists)
+                   (setq group-count (+ 1 group-count))
+                   (setq variant-group group-count))
+                 (loop for variant in (variants-of-pathway pathway)
+                           do (progn
+                                (setf (gethash variant variant-to-variant-group) variant-group) ; associate this variant to the variant-group
+                                (setf (gethash variant-group variant-group-to-variants)
+                                      (cons variant (gethash variant-group variant-group-to-variants))) ; append the variant to the variant group
+                        ))
+                     ))
+              )
+    variant-group-to-variants))
+
+(defun format-pathway-variant-group (group-id variant-id)
+  (format nil "INSERT INTO pathway_variant_group (variant_group_id, variant_id)
+VALUES (~A, (SELECT id FROM pathway WHERE name = ~A);"
+          (format-sql-literal group-id)
+          (format-sql-literal (format-frame variant-id))))
+
+(defun dump-variants-by-group (variant-group-to-variants)
+  "Format INSERT INTO instructions from a hash-table with key group id and values list of variant pathway identifiers."
+  (let ((instructions ()))
+    (maphash #'(lambda (key value)
+                 (loop for variant in value
+                       do (setq instructions
+                                (cons (format-pathway-variant-group key variant)
+                                      instructions))))
+             variant-group-to-variants)
+    instructions))
 
 (defun dump-pathways ()
   "Dump all pathways."
@@ -512,12 +586,19 @@ It will remote TAX- or ORG- prefix and parse the number as integer."
                       for variants = (variants-of-pathway pathway)
                       when (not (null variants))
                         collect (format-pathway-variants pathway variants)))
+                                        ; An alternative way of representing a pathway variant, as a pathway variant group
+               (format-list-of-lines
+                (dump-variants-by-group (group-by-pathway-variant-groups (all-pathways))))
                                         ; Continue with super-pathways
                (format-list-of-lines
                 (loop for pathway in (all-pathways)
                       for sub-pathways = (get-slot-values pathway 'sub-pathways)
                       when (not (null sub-pathways))
                         collect (format-pathway-sub-pathways pathway sub-pathways)))
+                                        ; Finally, dump all pathway flattened ontology dags
+               (format-list-of-lines
+                (loop for pathway in (all-pathways)
+                     collect (dump-pathway-ontology pathway)))
                ))
 
 (defun dump-all ()
@@ -545,5 +626,5 @@ It will remote TAX- or ORG- prefix and parse the number as integer."
   (write-to-file "dump.sql" (dump-all)))
 
 
-(main)
+; (main)
 
