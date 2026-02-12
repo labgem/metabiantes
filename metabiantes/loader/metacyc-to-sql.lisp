@@ -479,11 +479,11 @@ VALUES ((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM reaction WHE
               (get-frame-name pathway)
               (get-frame-name reaction)
               direction)
-      "" ))
-                                        ; do not dump this reaction - pathway relation when reaction is not a member of reaction class
+      "")) ; do not dump this reaction-pathway relation when reaction is not a member of reaction class
 
 (defun format-pathway-reaction-direction (pathway reaction)
   ; TODO
+  
   )
 
 (defun format-pathway-reactions-insertion (pathway)
