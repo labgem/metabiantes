@@ -380,15 +380,16 @@ VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide
                                     (get-frame-name sub-pathway))))
       (format-pathway-sub-pathway pathway sub-pathways))) ; sub-pathways is a single string
 
-(defun extract-taxonomic-id-number (taxonomic-range)
-  "Extract the integer value of a taxonomic ID from a Tax-ID object TAXONOMIC-RANGE.
-It will remote TAX- or ORG- prefix and parse the number as integer."
-  (parse-integer
-   (replace-regexp 
-    (replace-regexp (symbol-name (get-frame-name taxonomic-range))
-                    "TAX-" "")
-    "ORG-" "")))
-
+(defun extract-taxonomic-id-number (taxonomic-frame)
+  "Extract the integer value of a taxonomic ID from a Tax-ID object TAXONOMIC-FRAME.
+It will keep only frame with name starting by TAX-, expected to be a taxonomic Id of the NCBI-Taxonomy (not garanteed)."
+  (let ((taxon (symbol-name (get-frame-name taxonomic-frame))))
+    (if (excl:match-regexp "TAX-" taxon)
+        (parse-integer
+         (replace-regexp taxon
+                    "TAX-"
+                    ""))
+        nil)))
 
 (defun format-one-pathway-taxonomic-range-insertion (pathway tax-id)
   "Format an INSERT INTO instruction for a PATHWAY taxonomic range TAX-ID."
@@ -409,10 +410,14 @@ It will remote TAX- or ORG- prefix and parse the number as integer."
 
 (defun format-one-pathway-species-insertion (pathway tax-id)
   "Format an INSERT INTO instruction for the species where a pathway has been described."
-  (format nil "INSERT INTO pathway_species (pathway_id, species_id) VALUES
+  (let ((id (extract-taxonomic-id-number tax-id)))
+    (if (not (null id))
+        (format nil "INSERT INTO pathway_species (pathway_id, species_id) VALUES
 ((SELECT id FROM pathway WHERE name = '~A'), ~D);~%"
-          (get-frame-name pathway)
-          (format-sql-literal (extract-taxonomic-id-number tax-id))))
+                (get-frame-name pathway)
+                (format-sql-literal id))
+        ""
+        )))
 
 (defun format-all-pathway-species-insertion (pathway)
   "Format all species of PATHWAY."
@@ -558,7 +563,7 @@ VALUES ((SELECT id FROM pathway WHERE name = ~A), ~A, ~A, ~A);"
 
 (defun format-pathway-variant-group (group-id variant-id)
   (format nil "INSERT INTO pathway_variant_group (variant_group_id, variant_id)
-VALUES (~A, (SELECT id FROM pathway WHERE name = ~A);"
+VALUES (~A, (SELECT id FROM pathway WHERE name = ~A));"
           (format-sql-literal group-id)
           (format-sql-literal (format-frame variant-id))))
 
@@ -604,14 +609,13 @@ VALUES (~A, (SELECT id FROM pathway WHERE name = ~A);"
 (defun dump-all ()
   "Dump all MetaCyc database as SQL (according to the schema having effectively only a selected subset of the information)."
   (concatenate 'string
-               (dump-substrates)
-               (dump-compounds)
-               (dump-polypeptides)
-               (dump-complexes)
-               (dump-reactions)
-               (dump-enzymes)
-               (dump-pathways)
-               ))
+              (dump-substrates)
+              (dump-compounds)
+              (dump-polypeptides)
+              (dump-complexes)
+              (dump-reactions)
+              (dump-enzymes)
+              (dump-pathways)))
 
 (defun write-to-file (file content)
   "Write a string CONTENT into a file with filename FILE."
