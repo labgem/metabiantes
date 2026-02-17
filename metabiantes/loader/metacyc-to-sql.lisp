@@ -19,6 +19,7 @@
 (select-organism :org-id 'meta)
 
 (load "flatten-ontology-graph")
+(load "reaction-graph")
 
 ;;
 ;; Generic SQL related functions
@@ -83,7 +84,10 @@
          (symbol-name (get-frame-name frame)))
         ((symbolp frame) (symbol-name frame))
         (t (progn
-           (message "Error: format-frame type not handled")
+           (message (format nil "Error: format-frame: type ~A not handled for frame ~A."
+                            (type-of frame)
+                            frame
+                            ))
            ()
            ))))
 
@@ -247,6 +251,11 @@ VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide
   (cond ((reaction-type? reaction :small-molecule) "small-molecule"
          (reaction-type? reaction :transport) "transport")))
 
+(defun format-reaction-physiological-direction (direction)
+  (cond ((equal direction 'physiol-left-to-right) "left-to-right")
+        ((equal direction 'physiol-right-to-left) "right-to-left")
+        ((equal direction 'left-to-right) "left-to-right")
+        ((equal direction 'right-to-left) "right-to-left")))
 
 (defun reaction-insertion (reaction)
   "Format an INSERT INTO instruction for a reaction REACTION."
@@ -260,8 +269,7 @@ VALUES ('~A', ~A, ~A, ~A, ~A, ~A, ~A, ~A, ~A);~%"
           (format-sql-literal (get-slot-value reaction 'gibbs-0)) 
           (format-sql-boolean (get-slot-value reaction 'physiologically-relevant))
           (format-sql-boolean (get-slot-value reaction 'reaction-balance-status))
-          (format-sql-literal (get-slot-value reaction 'reaction-physiological-direction))))
-
+          (format-sql-literal (format-reaction-physiological-direction (get-slot-value reaction 'reaction-direction)))))
 
 (defun format-one-reaction-substrate-insertion (reaction substrate side)
   "Format an INSERT INTO instruction for the SUBSTRATE of a REACTION, on reaction side (LEFT or RIGHT)."
@@ -297,7 +305,7 @@ VALUES ('~A', ~A, ~A, ~A, ~A, ~A, ~A, ~A, ~A);~%"
 
 
 (defun dump-reaction (reaction)
-  "Dump a reaction."
+  "Dump one reaction."
   (concatenate 'string
                (reaction-insertion reaction)
                (reaction-substrate-insertion reaction)))
@@ -332,9 +340,6 @@ VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide
 
 ;; Finally, deal with the pathways
 
-; TODO
-;(defun get-pathway-type (pathway)
-;  (cond (())))
 
 (defun format-pathway-insertion (pathway)
   "Format an INSERT INTO instruction for a pathway."
@@ -439,6 +444,16 @@ It will keep only frame with name starting by TAX-, expected to be a taxonomic I
    "reaction_id"
    reaction-name))
 
+(defun format-one-pathway-key-non-reaction-insertion (pathway-name reaction-name)
+  "Format an INSERT INTO instruction for a key reaction REACTION-NAME OF pathway PATHWAY-NAME."
+  (insert-into-by-foreign-key
+   "pathway_key_non_reaction"
+   "pathway"
+   "pathway_id"
+   pathway-name
+   "reaction"
+   "reaction_id"
+   reaction-name))
 
 (defun format-all-pathway-key-reaction-insertion (pathway)
   "Format all INSERT INTO instructions for key reactions of a PATHWAY."
@@ -453,6 +468,18 @@ It will keep only frame with name starting by TAX-, expected to be a taxonomic I
               (format-frame pathway)
               (format-frame key-reactions))))))
 
+(defun format-all-pathway-key-non-reaction-insertion (pathway)
+  "Format all INSERT INTO instructions for key reactions of a PATHWAY."
+  (let ((key-non-reactions (get-slot-values pathway 'key-non-reactions)))
+    (cond ((null key-non-reactions) "")
+          ((listp key-non-reactions) (format-list-of-lines
+                                  (loop for reaction in key-non-reactions
+                                        collect (format-one-pathway-key-non-reaction-insertion
+                                                 (format-frame pathway)
+                                                 (format-frame reaction)))))
+          (t (format-one-pathway-key-non-reaction-insertion
+              (format-frame pathway)
+              (format-frame key-non-reactions))))))
 
 (defun any (list)
   "True if any item of the LIST is True."
@@ -480,16 +507,26 @@ It will keep only frame with name starting by TAX-, expected to be a taxonomic I
   "Format one INSERT INTO instruction for a REACTION of a PATHWAY."
   (if (is-reaction reaction)
       (format nil "INSERT INTO pathway_reaction (pathway_id, reaction_id, reaction_direction)
-VALUES ((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM reaction WHERE name = '~A'), '~A');"
+VALUES ((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM reaction WHERE name = '~A'), ~A);"
               (get-frame-name pathway)
               (get-frame-name reaction)
-              direction)
+              (format-sql-literal direction))
       "")) ; do not dump this reaction-pathway relation when reaction is not a member of reaction class
 
-(defun format-pathway-reaction-direction (pathway reaction)
-  ; TODO
-  
-  )
+(defun format-pathway-reaction-graph (pathway)
+  "Format the graph of pathway reactions."
+  (let* ((reaction-metabolite-edges (parse-reaction-metabolite-graph-edges pathway))
+         (reaction-edges (metabolite-graph-edges-to-reaction-graph-edges reaction-metabolite-edges)))
+    (format-list-of-lines
+     (loop for edge in reaction-edges
+           for reaction1 = (car edge)
+           for reaction2 = (cdr edge)
+           collect 
+    (format nil "INSERT INTO pathway_reaction_graph (pathway_id, predecessor_reaction_id, successor_reaction_id)
+VALUES ((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM reaction WHERE name = '~A'));"
+            (get-frame-name pathway)
+            (get-frame-name reaction1)
+            (get-frame-name reaction2))))))
 
 (defun format-pathway-reactions-insertion (pathway)
   "Format all pathway reactions insertion of PATHWAY."
@@ -500,7 +537,7 @@ VALUES ((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM reaction WHE
                                     collect (format-one-pathway-reaction-insertion
                                              pathway
                                              reaction
-                                             (format-pathway-reaction-direction pathway reaction)))))
+                                             nil))))
           (t
            (format-one-pathway-reaction-insertion pathway
                                                   reactions)))))
@@ -510,10 +547,11 @@ VALUES ((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM reaction WHE
   (concatenate 'string
                (format-pathway-insertion pathway)
                (format-all-pathway-key-reaction-insertion pathway)
+               (format-all-pathway-key-non-reaction-insertion pathway)
                (format-all-pathway-species-insertion pathway)
                (format-all-pathway-taxonomic-range-insertion pathway)
                (format-pathway-reactions-insertion pathway)
-                                        ; TODO (format-pathway-graph pathway)
+               (format-pathway-reaction-graph pathway)
                ))
 
 
@@ -609,12 +647,12 @@ VALUES (~A, (SELECT id FROM pathway WHERE name = ~A));"
 (defun dump-all ()
   "Dump all MetaCyc database as SQL (according to the schema having effectively only a selected subset of the information)."
   (concatenate 'string
-              (dump-substrates)
-              (dump-compounds)
-              (dump-polypeptides)
-              (dump-complexes)
-              (dump-reactions)
-              (dump-enzymes)
+;              (dump-substrates)
+;              (dump-compounds)
+;              (dump-polypeptides)
+;              (dump-complexes)
+;              (dump-reactions)
+;              (dump-enzymes)
               (dump-pathways)))
 
 (defun write-to-file (file content)
@@ -627,8 +665,7 @@ VALUES (~A, (SELECT id FROM pathway WHERE name = ~A));"
 
 
 (defun main ()
-  (write-to-file "dump.sql" (dump-all)))
+  (write-to-file "/tmp/dump.sql" (dump-all)))
 
 
-; (main)
-
+(main)
