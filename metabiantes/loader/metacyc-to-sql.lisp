@@ -8,15 +8,17 @@
 ;; EC: (load "metacyc-to-sql")
 ;;
 ;; Alternatively, run
-;; $ pathway-tools -lisp -eval '(load "metacyc-to-sql")'
+;; $ pathway-tools -lisp -eval '(progn (load "metacyc-to-sql") (select-organism :org-id 'meta) (write-to-file "dump.sql" (dump-all)) (exit))'
 
 ;; For some help on pathway-tools lisp API, refer to
 ;; https://www.pathwaytools.com/api/
-;;
 
 (in-package 'ecocyc)
 
 (select-organism :org-id 'meta)
+
+(load "flatten-ontology-graph")
+(load "reaction-graph")
 
 ;;
 ;; Generic SQL related functions
@@ -81,7 +83,10 @@
          (symbol-name (get-frame-name frame)))
         ((symbolp frame) (symbol-name frame))
         (t (progn
-           (message "Error: format-frame type not handled")
+           (message (format nil "Error: format-frame: type ~A not handled for frame ~A."
+                            (type-of frame)
+                            frame
+                            ))
            ()
            ))))
 
@@ -245,6 +250,11 @@ VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide
   (cond ((reaction-type? reaction :small-molecule) "small-molecule"
          (reaction-type? reaction :transport) "transport")))
 
+(defun format-reaction-physiological-direction (direction)
+  (cond ((equal direction 'physiol-left-to-right) "left-to-right")
+        ((equal direction 'physiol-right-to-left) "right-to-left")
+        ((equal direction 'left-to-right) "left-to-right")
+        ((equal direction 'right-to-left) "right-to-left")))
 
 (defun reaction-insertion (reaction)
   "Format an INSERT INTO instruction for a reaction REACTION."
@@ -258,8 +268,7 @@ VALUES ('~A', ~A, ~A, ~A, ~A, ~A, ~A, ~A, ~A);~%"
           (format-sql-literal (get-slot-value reaction 'gibbs-0)) 
           (format-sql-boolean (get-slot-value reaction 'physiologically-relevant))
           (format-sql-boolean (get-slot-value reaction 'reaction-balance-status))
-          (format-sql-literal (get-slot-value reaction 'reaction-physiological-direction))))
-
+          (format-sql-literal (format-reaction-physiological-direction (get-slot-value reaction 'reaction-direction)))))
 
 (defun format-one-reaction-substrate-insertion (reaction substrate side)
   "Format an INSERT INTO instruction for the SUBSTRATE of a REACTION, on reaction side (LEFT or RIGHT)."
@@ -295,7 +304,7 @@ VALUES ('~A', ~A, ~A, ~A, ~A, ~A, ~A, ~A, ~A);~%"
 
 
 (defun dump-reaction (reaction)
-  "Dump a reaction."
+  "Dump one reaction."
   (concatenate 'string
                (reaction-insertion reaction)
                (reaction-substrate-insertion reaction)))
@@ -330,9 +339,6 @@ VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide
 
 ;; Finally, deal with the pathways
 
-; TODO
-;(defun get-pathway-type (pathway)
-;  (cond (())))
 
 (defun format-pathway-insertion (pathway)
   "Format an INSERT INTO instruction for a pathway."
@@ -345,7 +351,7 @@ VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide
 
 
 (defun format-pathway-variants (pathway variants)
-  "Format all INSERT INTO for every VARIANTS of PATHWAY."
+"Format all INSERT INTO for every VARIANTS of PATHWAY."
   (if (listp variants)
       (format nil "INSERT INTO pathway_variant (pathway_id, variant_id) VALUES ~% ~{~A~^,~%~};~%"
               (loop for variant in variants
@@ -378,15 +384,16 @@ VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide
                                     (get-frame-name sub-pathway))))
       (format-pathway-sub-pathway pathway sub-pathways))) ; sub-pathways is a single string
 
-(defun extract-taxonomic-id-number (taxonomic-range)
-  "Extract the integer value of a taxonomic ID from a Tax-ID object TAXONOMIC-RANGE.
-It will remote TAX- or ORG- prefix and parse the number as integer."
-  (parse-integer
-   (replace-regexp 
-    (replace-regexp (symbol-name (get-frame-name taxonomic-range))
-                    "TAX-" "")
-    "ORG-" "")))
-
+(defun extract-taxonomic-id-number (taxonomic-frame)
+  "Extract the integer value of a taxonomic ID from a Tax-ID object TAXONOMIC-FRAME.
+It will keep only frame with name starting by TAX-, expected to be a taxonomic Id of the NCBI-Taxonomy (not garanteed)."
+  (let ((taxon (symbol-name (get-frame-name taxonomic-frame))))
+    (if (excl:match-regexp "TAX-" taxon)
+        (parse-integer
+         (replace-regexp taxon
+                    "TAX-"
+                    ""))
+        nil)))
 
 (defun format-one-pathway-taxonomic-range-insertion (pathway tax-id)
   "Format an INSERT INTO instruction for a PATHWAY taxonomic range TAX-ID."
@@ -405,17 +412,25 @@ It will remote TAX- or ORG- prefix and parse the number as integer."
           (t (format-one-pathway-taxonomic-range-insertion pathway tax-id)))))
 
 
-(defun format-one-pathway-species-insertion (pathway species)
-                                        ; TODO not yet implemented in the schema
-  (format nil "INSERT INTO pathway_species (pathway_id, species_id) VALUES
-((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM taxon WHERE name = '~A'));"
-          (get-frame-name pathway)
-          (get-frame-name species)
-          ))
+(defun format-one-pathway-species-insertion (pathway tax-id)
+  "Format an INSERT INTO instruction for the species where a pathway has been described."
+  (let ((id (extract-taxonomic-id-number tax-id)))
+    (if (not (null id))
+        (format nil "INSERT INTO pathway_species (pathway_id, species_id) VALUES
+((SELECT id FROM pathway WHERE name = '~A'), ~D);~%"
+                (get-frame-name pathway)
+                (format-sql-literal id))
+        ""
+        )))
 
-(defun format-pathway-graph (pathway)
-  "TODO"
-  )
+(defun format-all-pathway-species-insertion (pathway)
+  "Format all species of PATHWAY."
+  (let ((tax-id (get-slot-values pathway 'species)))
+    (cond ((null tax-id) "")
+          ((listp tax-id) 
+           (format-list-of-lines (loop for id in tax-id
+                                       collect (format-one-pathway-species-insertion pathway id))))
+          (t (format-one-pathway-species-insertion pathway tax-id)))))
 
 (defun format-one-pathway-key-reaction-insertion (pathway-name reaction-name)
   "Format an INSERT INTO instruction for a key reaction REACTION-NAME OF pathway PATHWAY-NAME."
@@ -441,7 +456,6 @@ It will remote TAX- or ORG- prefix and parse the number as integer."
           (t (format-one-pathway-key-reaction-insertion
               (format-frame pathway)
               (format-frame key-reactions))))))
-
 
 (defun any (list)
   "True if any item of the LIST is True."
@@ -469,16 +483,26 @@ It will remote TAX- or ORG- prefix and parse the number as integer."
   "Format one INSERT INTO instruction for a REACTION of a PATHWAY."
   (if (is-reaction reaction)
       (format nil "INSERT INTO pathway_reaction (pathway_id, reaction_id, reaction_direction)
-VALUES ((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM reaction WHERE name = '~A'), '~A');"
+VALUES ((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM reaction WHERE name = '~A'), ~A);"
               (get-frame-name pathway)
               (get-frame-name reaction)
-              (direction))
-      "" ))
-                                        ; do not dump this reaction - pathway relation when reaction is not a member of reaction class
+              (format-sql-literal direction))
+      "")) ; do not dump this reaction-pathway relation when reaction is not a member of reaction class
 
-(defun format-pathway-reaction-direction (pathway reaction)
-  
-  )
+(defun format-pathway-reaction-graph (pathway)
+  "Format the graph of pathway reactions."
+  (let* ((reaction-metabolite-edges (parse-reaction-metabolite-graph-edges pathway))
+         (reaction-edges (metabolite-graph-edges-to-reaction-graph-edges reaction-metabolite-edges)))
+    (format-list-of-lines
+     (loop for edge in reaction-edges
+           for reaction1 = (car edge)
+           for reaction2 = (cdr edge)
+           collect 
+    (format nil "INSERT INTO pathway_reaction_graph (pathway_id, predecessor_reaction_id, successor_reaction_id)
+VALUES ((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM reaction WHERE name = '~A'));"
+            (get-frame-name pathway)
+            (get-frame-name reaction1)
+            (get-frame-name reaction2))))))
 
 (defun format-pathway-reactions-insertion (pathway)
   "Format all pathway reactions insertion of PATHWAY."
@@ -489,7 +513,7 @@ VALUES ((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM reaction WHE
                                     collect (format-one-pathway-reaction-insertion
                                              pathway
                                              reaction
-                                             (format-pathway-reaction-direction pathway reaction)))))
+                                             nil))))
           (t
            (format-one-pathway-reaction-insertion pathway
                                                   reactions)))))
@@ -499,45 +523,112 @@ VALUES ((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM reaction WHE
   (concatenate 'string
                (format-pathway-insertion pathway)
                (format-all-pathway-key-reaction-insertion pathway)
-                                        ; TODO (format-pathway-species-insertion pathway)
+               (format-all-pathway-species-insertion pathway)
                (format-all-pathway-taxonomic-range-insertion pathway)
                (format-pathway-reactions-insertion pathway)
-                                        ; TODO (format-pathway-graph pathway)
+               (format-pathway-reaction-graph pathway)
                ))
 
+
+(defun format-pathway-ontology-insertion (pathway path depth pathway-class)
+  "Format an INSERT INTO instruction for an PATHWAY-CLASS in the ontology of a PATHWAY."
+  (format nil "INSERT INTO pathway_ontology (pathway_id, path, depth, pathway_class)
+VALUES ((SELECT id FROM pathway WHERE name = ~A), ~A, ~A, ~A);"
+          (format-sql-literal (format-frame pathway))
+          (format-sql-literal path)
+          (format-sql-literal depth)
+          (format-sql-literal (format-frame pathway-class))))
+
+
+(defun dump-pathway-ontology (pathway)
+  "Dump a flattened ontology directed acyclic graph for the PATHWAY."
+  (format-list-of-lines
+   (loop for ontology-level-list in (flatten-ontology-graph (build-ontology-graph pathway)
+                                                            (get-frame-name pathway))
+         for pathway = (nth 0 ontology-level-list)
+         for depth = (nth 1 ontology-level-list)
+         for path-enumeration = (nth 2 ontology-level-list)
+         for pathway_class = (nth 3 ontology-level-list)
+         collect (format-pathway-ontology-insertion pathway path-enumeration depth pathway_class))))
+
+(defun group-by-pathway-variant-groups (pathways)
+  "Make a hashtable with group id to variants id for pathway variant groups."
+  (let ((group-count 0)
+        (variant-to-variant-group (make-hash-table))
+        (variant-group-to-variants (make-hash-table)))
+    (loop for pathway in pathways
+          do (progn
+               (multiple-value-bind
+                     (variant-group variant-group-exists)
+                   (gethash pathway variant-to-variant-group)
+                 (when (not variant-group-exists)
+                   (setq group-count (+ 1 group-count))
+                   (setq variant-group group-count))
+                 (loop for variant in (variants-of-pathway pathway)
+                           do (progn
+                                (setf (gethash variant variant-to-variant-group) variant-group) ; associate this variant to the variant-group
+                                (setf (gethash variant-group variant-group-to-variants)
+                                      (cons variant (gethash variant-group variant-group-to-variants))) ; append the variant to the variant group
+                        ))
+                     ))
+              )
+    variant-group-to-variants))
+
+(defun format-pathway-variant-group (group-id variant-id)
+  (format nil "INSERT INTO pathway_variant_group (variant_group_id, variant_id)
+VALUES (~A, (SELECT id FROM pathway WHERE name = ~A));"
+          (format-sql-literal group-id)
+          (format-sql-literal (format-frame variant-id))))
+
+(defun dump-variants-by-group (variant-group-to-variants)
+  "Format INSERT INTO instructions from a hash-table with key group id and values list of variant pathway identifiers."
+  (let ((instructions ()))
+    (maphash #'(lambda (key value)
+                 (loop for variant in value
+                       do (setq instructions
+                                (cons (format-pathway-variant-group key variant)
+                                      instructions))))
+             variant-group-to-variants)
+    instructions))
 
 (defun dump-pathways ()
   "Dump all pathways."
   (concatenate 'string
-                                        ; First, dump all pathway names
-               (format-list-of-lines
-                (loop for pathway in (all-pathways)
-                      collect (dump-one-pathway pathway)))
-                                        ; Then, dump all pathway variants
-               (format-list-of-lines
-                (loop for pathway in (all-pathways)
-                      for variants = (variants-of-pathway pathway)
-                      when (not (null variants))
-                        collect (format-pathway-variants pathway variants)))
-                                        ; Continue with super-pathways
-               (format-list-of-lines
-                (loop for pathway in (all-pathways)
-                      for sub-pathways = (get-slot-values pathway 'sub-pathways)
-                      when (not (null sub-pathways))
-                        collect (format-pathway-sub-pathways pathway sub-pathways)))
+                ;;                         ; First, dump all pathway names
+                (format-list-of-lines
+                 (loop for pathway in (all-pathways)
+                       collect (dump-one-pathway pathway)))
+               ;;                          ; Then, dump all pathway variants
+               ;; (format-list-of-lines
+               ;;  (loop for pathway in (all-pathways)
+               ;;        for variants = (variants-of-pathway pathway)
+               ;;        when (not (null variants))
+               ;;          collect (format-pathway-variants pathway variants)))
+               ;;                          ; An alternative way of representing a pathway variant, as a pathway variant group
+               ;; (format-list-of-lines
+               ;;  (dump-variants-by-group (group-by-pathway-variant-groups (all-pathways))))
+               ;;                          ; Continue with super-pathways
+               ;; (format-list-of-lines
+               ;;  (loop for pathway in (all-pathways)
+               ;;        for sub-pathways = (get-slot-values pathway 'sub-pathways)
+               ;;        when (not (null sub-pathways))
+               ;;          collect (format-pathway-sub-pathways pathway sub-pathways)))
+               ;;                          ; Finally, dump all pathway flattened ontology dags
+               ;; (format-list-of-lines
+               ;;  (loop for pathway in (all-pathways)
+               ;;       collect (dump-pathway-ontology pathway)))
                ))
 
 (defun dump-all ()
   "Dump all MetaCyc database as SQL (according to the schema having effectively only a selected subset of the information)."
   (concatenate 'string
-               (dump-substrates)
-               (dump-compounds)
-               (dump-polypeptides)
-               (dump-complexes)
-               (dump-reactions)
-               (dump-enzymes)
-               (dump-pathways)
-               ))
+;              (dump-substrates)
+;              (dump-compounds)
+;              (dump-polypeptides)
+;              (dump-complexes)
+;              (dump-reactions)
+;              (dump-enzymes)
+              (dump-pathways)))
 
 (defun write-to-file (file content)
   "Write a string CONTENT into a file with filename FILE."
@@ -549,8 +640,7 @@ VALUES ((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM reaction WHE
 
 
 (defun main ()
-  (write-to-file "dump.sql" (dump-all)))
+  (write-to-file "/tmp/dump.sql" (dump-all)))
 
 
 ; (main)
-

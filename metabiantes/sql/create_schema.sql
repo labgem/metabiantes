@@ -1,6 +1,7 @@
 -- name: create_schema#
 -- Prepare a metabolic reference knowledge base database schema
 
+CREATE TYPE direction_t AS ENUM ('left-to-right', 'right-to-left');
 
 CREATE TABLE substrate (
     id INTEGER NOT NULL,
@@ -24,7 +25,7 @@ CREATE TABLE compound (
     CONSTRAINT unique_compound_name UNIQUE (name)
 );
 
-CREATE TABLE compound_name (
+CREATE TABLE compound_name_synonymes (
     compound_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     CONSTRAINT pk_compound_name PRIMARY KEY (compound_id, name),
@@ -56,20 +57,11 @@ CREATE TABLE reaction_name (
     CONSTRAINT fk_reaction_name_reaction_id FOREIGN KEY (reaction_id) REFERENCES reaction (id)
 );
 
-CREATE TABLE species (
-    id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    rank TEXT NOT NULL,
-    CONSTRAINT pk_species PRIMARY KEY (id),
-    CONSTRAINT unique_species_name UNIQUE (name)
-);
-
 CREATE TABLE reaction_species (
     reaction_id INTEGER NOT NULL,
-    species_id INTEGER NOT NULL,
-    CONSTRAINT pk_reaction_species PRIMARY KEY (reaction_id, species_id),
+    taxon_id INTEGER NOT NULL,
+    CONSTRAINT pk_reaction_species PRIMARY KEY (reaction_id, taxon_id),
     CONSTRAINT fk_reaction_species_reaction_id FOREIGN KEY (reaction_id) REFERENCES reaction (id),
-    CONSTRAINT fk_reaction_species_species_id FOREIGN KEY (species_id) REFERENCES species (id)
 );
 
 CREATE TABLE reaction_substrate (
@@ -125,7 +117,7 @@ CREATE TABLE pathway (
 );
 
 
-CREATE TABLE pathway_name (
+CREATE TABLE pathway_name_synonymes (
     pathway_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     CONSTRAINT pk_pathway_name PRIMARY KEY (pathway_id, name),
@@ -133,21 +125,12 @@ CREATE TABLE pathway_name (
 );
 
 
-CREATE TABLE pathway_reaction_direction (
-    pathway_id INTEGER NOT NULL,
-    reaction_id INTEGER NOT NULL,
-    reaction_direction TEXT NOT NULL, -- "right" for "left-to-right" or "left" for "right-to-left"
-    CONSTRAINT pk_pathway_reaction_layout PRIMARY KEY (pathway_id, reaction_id),
-    CONSTRAINT fk_pathway_reaction_layout_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id),
-    CONSTRAINT fk_pathway_reaction_layout_reaction_id FOREIGN KEY (reaction_id) REFERENCES reaction (id)
-);
-
 CREATE TABLE pathway_sub_pathway (
     super_pathway_id INTEGER NOT NULL,
     sub_pathway_id INTEGER NOT NULL,
     CONSTRAINT pk_sub_pathway PRIMARY KEY (super_pathway_id, sub_pathway_id),
-    CONSTRAINT fk_sub_pathwa_super_pathway_id FOREIGN KEY (super_pathway_id) REFERENCES pathway (id),
-    CONSTRAINT fk_sub_pathwa_sub_pathway_id FOREIGN KEY (sub_pathway_id) REFERENCES pathway (id)    
+    CONSTRAINT fk_sub_pathway_super_pathway_id FOREIGN KEY (super_pathway_id) REFERENCES pathway (id),
+    CONSTRAINT fk_sub_pathway_sub_pathway_id FOREIGN KEY (sub_pathway_id) REFERENCES pathway (id)    
 );
 
 -- A pathway reaction graph
@@ -155,17 +138,31 @@ CREATE TABLE pathway_sub_pathway (
 -- represents the arcs wihin a directed reaction graph of a given pathway
 CREATE TABLE pathway_reaction_graph (
     pathway_id INTEGER NOT NULL,
-    left_reaction_id INTEGER NOT NULL,
-    right_reaction_id INTEGER NOT NULL,
-    CONSTRAINT pk_pathway_reaction_layout PRIMARY KEY (pathway_id, left_reaction_id, right_reaction_id),
+    reaction1_id INTEGER NOT NULL,
+    reaction2_id INTEGER NOT NULL,
+    direction TEXT NOT NULL,
+    CONSTRAINT pk_pathway_reaction_layout PRIMARY KEY (pathway_id, reaction1_id, reaction2_id),
     CONSTRAINT fk_pathway_reaction_layout_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id),
-    CONSTRAINT fk_pathway_reaction_layout_left_reaction_id FOREIGN KEY (left_reaction_id) REFERENCES reaction (id),
-    CONSTRAINT fk_pathway_reaction_layout_right_reaction_id FOREIGN KEY (right_reaction_id) REFERENCES reaction (id)
+    CONSTRAINT fk_pathway_reaction_layout_reaction1_id FOREIGN KEY (reaction1_id) REFERENCES reaction (id),
+    CONSTRAINT fk_pathway_reaction_layout_reaction2_id FOREIGN KEY (reaction2_id) REFERENCES reaction (id),
 ); 
 
+CREATE TABLE pathway_reaction_metabolite_graph (
+    pathway_id INTEGER NOT NULL,
+    reaction_id INTEGER NOT NULL,
+    metabolite_id INTEGER NOT NULL,
+    reaction_direction direction_t NOT NULL,
+    CONSTRAINT pk_pathway_reaction_metabolite_graph PRIMARY KEY (pathway_id, reaction_id, metabolite_id),
+    CONSTRAINT fk_pathway_reaction_metabolite_graph_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id),
+    CONSTRAINT fk_pathway_reaction_metabolite_graph_reaction_id FOREIGN KEY (reaction_id) REFERENCES reaction (id),
+    CONSTRAINT fk_pathway_reaction_metabolite_graph_metabolite_id FOREIGN KEY (metabolite_id) REFERENCES substrate (id)
+);
+
+-- 
 CREATE TABLE pathway_reaction (
     pathway_id INTEGER NOT NULL,
     reaction_id INTEGER NOT NULL,
+    reaction_direction direction_t,
     CONSTRAINT pk_pathway_reaction PRIMARY KEY (pathway_id, reaction_id),
     CONSTRAINT fk_pathway_reaction_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id),
     CONSTRAINT fk_pathway_reaction_reaction_id FOREIGN KEY (reaction_id) REFERENCES reaction (id) 
@@ -201,6 +198,22 @@ CREATE TABLE pathway_variant (
     CONSTRAINT pk_pathway_variant PRIMARY KEY (pathway_id, variant_id),
     CONSTRAINT fk_pathway_variant_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id),
     CONSTRAINT fk_pathway_variant_variant_id FOREIGN KEY (variant_id) REFERENCES pathway (id)
+);
+
+CREATE TABLE pathway_variant_group (
+    variant_group_id INTEGER NOT NULL,
+    variant_id INTEGER NOT NULL,
+    CONSTRAINT pk_pathway_variant_group PRIMARY KEY (variant_group_id, variant_id),
+    CONSTRAINT fk_pathway_variant_group_variant_id FOREIGN KEY (variant_id) REFERENCES pathway (id)
+);
+
+CREATE TABLE pathway_ontology (
+    pathway_id INTEGER NOT NULL,
+    path INTEGER NOT NULL,
+    depth INTEGER NOT NULL,
+    pathway_class TEXT NOT NULL,
+    CONSTRAINT pk_pathway_ontology PRIMARY KEY (pathway_id, path, depth, pathway_class),
+    CONSTRAINT fk_pathway_ontology_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id)
 );
 
 CREATE TABLE ec_number (

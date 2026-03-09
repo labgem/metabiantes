@@ -16,7 +16,7 @@ Then, in the Lisp prompt, enter:
 
 ```lisp
 (load "metacyc-to-sql")
-(selet-organism :org-id 'meta)
+(select-organism :org-id 'meta)
 (write-to-file "dump.sql" (dump-all))
 ```
 The dump will be written to a file named `dump.sql` in the current.
@@ -27,9 +27,7 @@ Alternatively, you wan use the wrapper shell script `metabiantes.sh` as follows
 sh metabiantes.sh "dump.sql" "meta"
 ```
 
-For the EcoCyc database dump using the same schema, you can replace `"meta"` by `"eco"`.
-
-
+For the EcoCyc database dump using the same schema, you can replace `"meta"` by `"eco"`, or any other PGDB identifier.
 
 ## Create a PostgreSQL database with this dump
 
