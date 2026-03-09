@@ -158,7 +158,7 @@ CREATE TABLE pathway_reaction_graph (
     pathway_id SERIAL NOT NULL,
     predecessor_reaction_id SERIAL NOT NULL,
     successor_reaction_id SERIAL NOT NULL,
-    CONSTRAINT pk_pathway_reaction_graph PRIMARY KEY (pathway_id, left_reaction_id, right_reaction_id),
+    CONSTRAINT pk_pathway_reaction_graph PRIMARY KEY (pathway_id, predecessor_reaction_id, successor_reaction_id),
     CONSTRAINT fk_pathway_reaction_graph_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id),
     CONSTRAINT fk_pathway_reaction_graph_predecessor_reaction_id FOREIGN KEY (predecessor_reaction_id) REFERENCES reaction (id),
     CONSTRAINT fk_pathway_reaction_graph_successor_reaction_id FOREIGN KEY (successor_reaction_id) REFERENCES reaction (id)
@@ -180,14 +180,6 @@ CREATE TABLE pathway_key_reaction (
     CONSTRAINT pk_pathway_key_reaction PRIMARY KEY (pathway_id, reaction_id),
     CONSTRAINT fk_pathway_key_reaction_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id),
     CONSTRAINT fk_pathway_key_reaction_reaction_id FOREIGN KEY (reaction_id) REFERENCES reaction (id) 
-);
-
-CREATE TABLE pathway_key_non_reaction (
-    pathway_id SERIAL NOT NULL,
-    reaction_id SERIAL NOT NULL,
-    CONSTRAINT pk_pathway_key_non_reaction PRIMARY KEY (pathway_id, reaction_id),
-    CONSTRAINT fk_pathway_key_non_reaction_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id),
-    CONSTRAINT fk_pathway_key_non_reaction_reaction_id FOREIGN KEY (reaction_id) REFERENCES reaction (id), 
 );
 
 CREATE TABLE pathway_species (

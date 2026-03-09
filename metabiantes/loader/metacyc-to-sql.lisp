@@ -8,11 +8,10 @@
 ;; EC: (load "metacyc-to-sql")
 ;;
 ;; Alternatively, run
-;; $ pathway-tools -lisp -eval '(load "metacyc-to-sql")'
+;; $ pathway-tools -lisp -eval '(progn (load "metacyc-to-sql") (select-organism :org-id 'meta) (write-to-file "dump.sql" (dump-all)) (exit))'
 
 ;; For some help on pathway-tools lisp API, refer to
 ;; https://www.pathwaytools.com/api/
-;;
 
 (in-package 'ecocyc)
 
@@ -444,16 +443,6 @@ It will keep only frame with name starting by TAX-, expected to be a taxonomic I
    "reaction_id"
    reaction-name))
 
-(defun format-one-pathway-key-non-reaction-insertion (pathway-name reaction-name)
-  "Format an INSERT INTO instruction for a key reaction REACTION-NAME OF pathway PATHWAY-NAME."
-  (insert-into-by-foreign-key
-   "pathway_key_non_reaction"
-   "pathway"
-   "pathway_id"
-   pathway-name
-   "reaction"
-   "reaction_id"
-   reaction-name))
 
 (defun format-all-pathway-key-reaction-insertion (pathway)
   "Format all INSERT INTO instructions for key reactions of a PATHWAY."
@@ -467,19 +456,6 @@ It will keep only frame with name starting by TAX-, expected to be a taxonomic I
           (t (format-one-pathway-key-reaction-insertion
               (format-frame pathway)
               (format-frame key-reactions))))))
-
-(defun format-all-pathway-key-non-reaction-insertion (pathway)
-  "Format all INSERT INTO instructions for key reactions of a PATHWAY."
-  (let ((key-non-reactions (get-slot-values pathway 'key-non-reactions)))
-    (cond ((null key-non-reactions) "")
-          ((listp key-non-reactions) (format-list-of-lines
-                                  (loop for reaction in key-non-reactions
-                                        collect (format-one-pathway-key-non-reaction-insertion
-                                                 (format-frame pathway)
-                                                 (format-frame reaction)))))
-          (t (format-one-pathway-key-non-reaction-insertion
-              (format-frame pathway)
-              (format-frame key-non-reactions))))))
 
 (defun any (list)
   "True if any item of the LIST is True."
@@ -547,7 +523,6 @@ VALUES ((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM reaction WHE
   (concatenate 'string
                (format-pathway-insertion pathway)
                (format-all-pathway-key-reaction-insertion pathway)
-               (format-all-pathway-key-non-reaction-insertion pathway)
                (format-all-pathway-species-insertion pathway)
                (format-all-pathway-taxonomic-range-insertion pathway)
                (format-pathway-reactions-insertion pathway)
@@ -555,14 +530,14 @@ VALUES ((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM reaction WHE
                ))
 
 
-(defun format-pathway-ontology-insertion (pathway path depth pathway_class)
-  "Format an INSERT INTO instruction for an item in the ontology of a PATHWAY."
+(defun format-pathway-ontology-insertion (pathway path depth pathway-class)
+  "Format an INSERT INTO instruction for an PATHWAY-CLASS in the ontology of a PATHWAY."
   (format nil "INSERT INTO pathway_ontology (pathway_id, path, depth, pathway_class)
 VALUES ((SELECT id FROM pathway WHERE name = ~A), ~A, ~A, ~A);"
           (format-sql-literal (format-frame pathway))
           (format-sql-literal path)
           (format-sql-literal depth)
-          (format-sql-literal (format-frame pathway_class))))
+          (format-sql-literal (format-frame pathway-class))))
 
 
 (defun dump-pathway-ontology (pathway)
@@ -619,29 +594,29 @@ VALUES (~A, (SELECT id FROM pathway WHERE name = ~A));"
 (defun dump-pathways ()
   "Dump all pathways."
   (concatenate 'string
-                                        ; First, dump all pathway names
-               (format-list-of-lines
-                (loop for pathway in (all-pathways)
-                      collect (dump-one-pathway pathway)))
-                                        ; Then, dump all pathway variants
-               (format-list-of-lines
-                (loop for pathway in (all-pathways)
-                      for variants = (variants-of-pathway pathway)
-                      when (not (null variants))
-                        collect (format-pathway-variants pathway variants)))
-                                        ; An alternative way of representing a pathway variant, as a pathway variant group
-               (format-list-of-lines
-                (dump-variants-by-group (group-by-pathway-variant-groups (all-pathways))))
-                                        ; Continue with super-pathways
-               (format-list-of-lines
-                (loop for pathway in (all-pathways)
-                      for sub-pathways = (get-slot-values pathway 'sub-pathways)
-                      when (not (null sub-pathways))
-                        collect (format-pathway-sub-pathways pathway sub-pathways)))
-                                        ; Finally, dump all pathway flattened ontology dags
-               (format-list-of-lines
-                (loop for pathway in (all-pathways)
-                     collect (dump-pathway-ontology pathway)))
+                ;;                         ; First, dump all pathway names
+                (format-list-of-lines
+                 (loop for pathway in (all-pathways)
+                       collect (dump-one-pathway pathway)))
+               ;;                          ; Then, dump all pathway variants
+               ;; (format-list-of-lines
+               ;;  (loop for pathway in (all-pathways)
+               ;;        for variants = (variants-of-pathway pathway)
+               ;;        when (not (null variants))
+               ;;          collect (format-pathway-variants pathway variants)))
+               ;;                          ; An alternative way of representing a pathway variant, as a pathway variant group
+               ;; (format-list-of-lines
+               ;;  (dump-variants-by-group (group-by-pathway-variant-groups (all-pathways))))
+               ;;                          ; Continue with super-pathways
+               ;; (format-list-of-lines
+               ;;  (loop for pathway in (all-pathways)
+               ;;        for sub-pathways = (get-slot-values pathway 'sub-pathways)
+               ;;        when (not (null sub-pathways))
+               ;;          collect (format-pathway-sub-pathways pathway sub-pathways)))
+               ;;                          ; Finally, dump all pathway flattened ontology dags
+               ;; (format-list-of-lines
+               ;;  (loop for pathway in (all-pathways)
+               ;;       collect (dump-pathway-ontology pathway)))
                ))
 
 (defun dump-all ()

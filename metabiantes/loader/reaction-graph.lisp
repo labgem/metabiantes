@@ -57,10 +57,10 @@
 ;; ;
 
 
-(defun main ()
-  (select-organism :org-id 'meta)
-  (print (metabolite-graph-edges-to-reaction-graph-edges
-          (parse-reaction-metabolite-graph-edges '|PWY-8089|)))
-  )
+;; (defun main ()
+;;   (select-organism :org-id 'meta)
+;;   (print (metabolite-graph-edges-to-reaction-graph-edges
+;;           (parse-reaction-metabolite-graph-edges '|PWY-8089|)))
+;;   )
 
 ; (main)
