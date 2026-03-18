@@ -133,16 +133,6 @@ CREATE TABLE pathway_name_synonymes (
     CONSTRAINT fk_pathway_name_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id)
 );
 
-
-CREATE TABLE pathway_reaction_direction (
-    pathway_id SERIAL NOT NULL,
-    reaction_id SERIAL NOT NULL,
-    reaction_direction TEXT NOT NULL, -- "right" for "left-to-right" or "left" for "right-to-left"
-    CONSTRAINT pk_pathway_reaction_direction PRIMARY KEY (pathway_id, reaction_id),
-    CONSTRAINT fk_pathway_reaction_direction_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id),
-    CONSTRAINT fk_pathway_reaction_direction_reaction_id FOREIGN KEY (reaction_id) REFERENCES reaction (id)
-);
-
 CREATE TABLE pathway_sub_pathway (
     super_pathway_id SERIAL NOT NULL,
     sub_pathway_id SERIAL NOT NULL,
@@ -169,6 +159,7 @@ CREATE TABLE pathway_reaction_graph (
 CREATE TABLE pathway_reaction (
     pathway_id SERIAL NOT NULL,
     reaction_id SERIAL NOT NULL,
+    reaction_direction TEXT,
     CONSTRAINT pk_pathway_reaction PRIMARY KEY (pathway_id, reaction_id),
     CONSTRAINT fk_pathway_reaction_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id),
     CONSTRAINT fk_pathway_reaction_reaction_id FOREIGN KEY (reaction_id) REFERENCES reaction (id) 
@@ -184,8 +175,8 @@ CREATE TABLE pathway_key_reaction (
 
 CREATE TABLE pathway_species (
     pathway_id SERIAL NOT NULL,
-    taxon_id INTEGER NOT NULL,
-    CONSTRAINT pk_pathway_species PRIMARY KEY (pathway_id, taxon_id),
+    species_id INTEGER NOT NULL,
+    CONSTRAINT pk_pathway_species PRIMARY KEY (pathway_id, species_id),
     CONSTRAINT fk_pathway_species_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id)
 );
 

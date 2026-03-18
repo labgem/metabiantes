@@ -450,6 +450,7 @@ It will keep only frame with name starting by TAX-, expected to be a taxonomic I
     (cond ((null key-reactions) "")
           ((listp key-reactions) (format-list-of-lines
                                   (loop for reaction in key-reactions
+                                        when (not (equal 'cons (type-of reaction))) ; ignore cons type
                                         collect (format-one-pathway-key-reaction-insertion
                                                  (format-frame pathway)
                                                  (format-frame reaction)))))
@@ -598,36 +599,36 @@ VALUES (~A, (SELECT id FROM pathway WHERE name = ~A));"
                 (format-list-of-lines
                  (loop for pathway in (all-pathways)
                        collect (dump-one-pathway pathway)))
-               ;;                          ; Then, dump all pathway variants
-               ;; (format-list-of-lines
-               ;;  (loop for pathway in (all-pathways)
-               ;;        for variants = (variants-of-pathway pathway)
-               ;;        when (not (null variants))
-               ;;          collect (format-pathway-variants pathway variants)))
-               ;;                          ; An alternative way of representing a pathway variant, as a pathway variant group
-               ;; (format-list-of-lines
-               ;;  (dump-variants-by-group (group-by-pathway-variant-groups (all-pathways))))
-               ;;                          ; Continue with super-pathways
-               ;; (format-list-of-lines
-               ;;  (loop for pathway in (all-pathways)
-               ;;        for sub-pathways = (get-slot-values pathway 'sub-pathways)
-               ;;        when (not (null sub-pathways))
-               ;;          collect (format-pathway-sub-pathways pathway sub-pathways)))
-               ;;                          ; Finally, dump all pathway flattened ontology dags
-               ;; (format-list-of-lines
-               ;;  (loop for pathway in (all-pathways)
-               ;;       collect (dump-pathway-ontology pathway)))
+                                         ; Then, dump all pathway variants
+                (format-list-of-lines
+                 (loop for pathway in (all-pathways)
+                       for variants = (variants-of-pathway pathway)
+                      when (not (null variants))
+                        collect (format-pathway-variants pathway variants)))
+                                        ; An alternative way of representing a pathway variant, as a pathway variant group
+               (format-list-of-lines
+                (dump-variants-by-group (group-by-pathway-variant-groups (all-pathways))))
+                                        ; Continue with super-pathways
+               (format-list-of-lines
+                (loop for pathway in (all-pathways)
+                      for sub-pathways = (get-slot-values pathway 'sub-pathways)
+                      when (not (null sub-pathways))
+                        collect (format-pathway-sub-pathways pathway sub-pathways)))
+                                        ; Finally, dump all pathway flattened ontology dags
+               (format-list-of-lines
+                (loop for pathway in (all-pathways)
+                     collect (dump-pathway-ontology pathway)))
                ))
 
 (defun dump-all ()
   "Dump all MetaCyc database as SQL (according to the schema having effectively only a selected subset of the information)."
   (concatenate 'string
-;              (dump-substrates)
-;              (dump-compounds)
-;              (dump-polypeptides)
-;              (dump-complexes)
-;              (dump-reactions)
-;              (dump-enzymes)
+              (dump-substrates)
+              (dump-compounds)
+              (dump-polypeptides)
+              (dump-complexes)
+              (dump-reactions)
+              (dump-enzymes)
               (dump-pathways)))
 
 (defun write-to-file (file content)
@@ -643,4 +644,4 @@ VALUES (~A, (SELECT id FROM pathway WHERE name = ~A));"
   (write-to-file "/tmp/dump.sql" (dump-all)))
 
 
-(main)
+; (main)
