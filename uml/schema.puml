@@ -1,0 +1,61 @@
+@startuml
+
+object Substrate {
+    name  
+}
+
+object Compound {
+    name
+}
+
+object Protein {
+    name    
+}
+
+object Complex {
+    
+}
+
+object Reaction {
+    
+}
+
+object Taxon {
+    name
+}
+
+object Pathway {
+    name
+}
+
+object PathwayVariantGroup {
+    
+}
+
+Reaction "*" -- "*" Pathway : "member of"
+
+Reaction "*" -- "*" Pathway : "key reaction of"
+
+Reaction "*" -- "*" Taxon : "described in"
+
+Taxon "*" -- "*" Pathway : "expected taxonomic range of"
+
+Substrate "*" -- "*" Reaction : "substrate of"
+
+Substrate "*" -- "*" Reaction : "product of"
+
+Protein "*" -- "*" Reaction : "catalyzes"
+
+Complex -|> Protein
+
+Protein "*" -- "*" Complex : "component of"
+
+Substrate -l-|> Compound
+
+Substrate -|> Protein
+
+Pathway -|> Pathway : "subclass of"
+
+Pathway "*" -- "1" PathwayVariantGroup : "member of"
+
+@enduml
