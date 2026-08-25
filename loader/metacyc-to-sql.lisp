@@ -12,6 +12,17 @@
 
 ;; For some help on pathway-tools lisp API, refer to
 ;; https://www.pathwaytools.com/api/
+;;
+;;
+;; Structure of the output SQL dump:
+;; 1. substrate
+;; 2. compound
+;; 3. polypeptides
+;; 4. complexes
+;; 5. reaction
+;; 6. enzymes
+;; 7. pathways
+
 
 (in-package 'ecocyc)
 
@@ -105,10 +116,10 @@
 
 
 (defun dump-substrates ()
-  (format nil "INSERT INTO substrate (name) ~%VALUES ~A;~%"
-          (format nil "~{('~A')~^,~% ~}" ;; join rows by (...),\n, as  
+  (format nil "INSERT INTO substrate (id) ~%VALUES ~A;~%"
+          (format nil "~{(~A)~^,~% ~}" ;; join rows by (...),\n, as  
                   (loop for substrate in (all-substrates (all-rxns :all))
-                        collect (format-frame substrate)))))
+                        collect (format-sql-literal (format-frame substrate))))))
 
 
 ;; Also dump the chemical compounds and their attributes
@@ -119,7 +130,7 @@
 
 (defun format-compound-column (compound)
   (format nil "('~A', ~A, ~A, ~A, ~A, ~A, ~A, ~A, ~A)"
-          (symbol-name (get-frame-name compound)) ; name
+          (symbol-name (get-frame-name compound)) ; id
           "NULL" ; type TODO
           (format-sql-literal (get-slot-value compound 'comment)) ; comment
           (format-sql-literal (get-slot-value compound 'atomic-number)) ; atomic number
@@ -134,7 +145,7 @@
 
 
 (defun dump-compounds ()
-  (format nil "INSERT INTO compound (name, type, comment, atomic_number, atom_charges, smiles, molecular_weight, monoisotopic_mw, gibbs_free_energy) ~%VALUES ~A;~%"
+  (format nil "INSERT INTO compound (id, type, comment, atomic_number, atom_charges, smiles, molecular_weight, monoisotopic_mw, gibbs_free_energy) ~%VALUES ~A;~%"
           (format nil "~{~A~^,~% ~}" ;; join rows by (...),\n, as  
                   (loop for compound in (all-compounds)
                         collect (format-compound-column compound))
@@ -146,7 +157,6 @@
 ;; First, let's consider the polypeptide
 ;;
 
-
 (defun format-polypeptide-type (polypeptide)
   "Return 'complex' if the polypeptide is a protein complex, otherwise, return 'monomer'."
   (if (complex-p polypeptide)
@@ -156,7 +166,7 @@
 
 (defun format-polypeptide-insertion (polypeptide)
   "Format INSERT INTO instruction for a polypeptide."
-  (format nil "INSERT INTO polypeptide (name, type, comment, experimental_molecular_weight, molecular_weight, molecular_weight_sequence, half_life, gene, neidhardt_spot_number, atom_charges, isoelectric_point) ~%VALUES ~% (~A);~%"
+  (format nil "INSERT INTO polypeptide (id, type, comment, experimental_molecular_weight, molecular_weight, molecular_weight_sequence, half_life, gene, neidhardt_spot_number, atom_charges, isoelectric_point) ~%VALUES ~% (~A);~%"
                                         ;(format nil "INSERT INTO polypeptide (name, type, comment, experimental_molecular_weight, molecular_weight, molecular_weight_sequence, half_life, gene, atom_charges, isoelectric_point) ~%VALUES ~% (~A);~%"
           (format nil "~A, ~A, ~A, ~A, ~A, ~A, ~A, ~A, ~A, ~A, ~A"
                   (format-sql-literal (symbol-name (get-frame-name polypeptide)))
@@ -187,20 +197,6 @@
    (loop for polypeptide in (all-polypeptides)
          collect (format-polypeptide-insertion polypeptide))))
 
-
-(defun insert-into-by-foreign-key (table-name table-one key-one table-one-key-name table-two key-two table-two-key-name)
-  "Create an INSERT INTO instruction for the insertion of a relation in table-name
-   with simply the value ID1, ID2 where ID1 is the ID of the row with name TABLE-ONE-KEY-NAME in table TABLE-ONE, and similarly for ID2."
-  (format nil "INSERT INTO ~A (~A, ~A) VALUES ~% ((SELECT id FROM ~A WHERE name = '~A'), (SELECT id FROM ~A WHERE name = '~A'));"
-          table-name
-          key-one
-          key-two
-          table-one
-          table-one-key-name
-          table-two
-          table-two-key-name))
-
-
 ;; Deal with protein complexes
 ;;
 ;; (all-protein-complexes) returns the list of protein complexes
@@ -208,7 +204,7 @@
 (defun format-complex-insertion (complex-name component-name coefficient)
   "Create one INSERT INTO instruction for a protein complex."
   (format nil "INSERT INTO polypeptide_complex_component (complex_id, component_id, coefficient)
-VALUES ((SELECT id FROM polypeptide WHERE name = '~A'), (SELECT id FROM polypeptide WHERE name = '~A'), ~D);~%"
+VALUES ('~A', '~A', ~D);~%"
           complex-name
           component-name
           coefficient))
@@ -240,7 +236,7 @@ VALUES ((SELECT id FROM polypeptide WHERE name = '~A'), (SELECT id FROM polypept
   "Create an INSERT INTO instruction for a relation between an enzyme (Protein) and a reaction,
 meaning: enzyme ENZYME catalyzes reaction REACTION"
   (format nil "INSERT INTO enzymatic_reaction (reaction_id, enzyme_id)
-VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide WHERE name = '~A'));~%"
+VALUES ('~A', '~A');~%"
           (get-frame-name reaction)
           (get-frame-name enzyme)))
 
@@ -258,9 +254,9 @@ VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide
 
 (defun reaction-insertion (reaction)
   "Format an INSERT INTO instruction for a reaction REACTION."
-  (format nil "INSERT INTO reaction (name, type, comment, spontaneous, ec_number, gibbs_free_energy, physiologically_relevant, reaction_balance_status, reaction_physiological_direction)
-VALUES ('~A', ~A, ~A, ~A, ~A, ~A, ~A, ~A, ~A);~%"
-          (get-frame-name reaction)
+  (format nil "INSERT INTO reaction (id, type, comment, spontaneous, ec_number, gibbs_free_energy, physiologically_relevant, reaction_balance_status, reaction_physiological_direction)
+VALUES (~A, ~A, ~A, ~A, ~A, ~A, ~A, ~A, ~A);~%"
+          (format-sql-literal (get-frame-name reaction))
           (format-sql-literal (get-reaction-type reaction))
           (format-sql-literal (get-slot-value reaction 'comment))
           (format-sql-boolean (get-slot-value reaction 'spontaneous?))
@@ -273,7 +269,7 @@ VALUES ('~A', ~A, ~A, ~A, ~A, ~A, ~A, ~A, ~A);~%"
 (defun format-one-reaction-substrate-insertion (reaction substrate side)
   "Format an INSERT INTO instruction for the SUBSTRATE of a REACTION, on reaction side (LEFT or RIGHT)."
   (format nil "INSERT INTO reaction_substrate (reaction_id, substrate_id, reaction_side) VALUES
-((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM substrate WHERE name = '~A'), '~A');~%"
+('~A', '~A', '~A');~%"
           (get-frame-name reaction)
           (format-frame substrate)
           side
@@ -322,7 +318,7 @@ VALUES ('~A', ~A, ~A, ~A, ~A, ~A, ~A, ~A, ~A);~%"
 (defun format-enzyme-insertion (reaction enzyme)
   "Format an INSERT INTO instruction for an ENZYME catalyzing a REACTION."
   (format nil "INSERT INTO reaction_enzyme (reaction_id, enzyme_id)
-VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide WHERE name = '~A'));"
+VALUES ('~A', '~A');"
           (get-frame-name reaction)
           (get-frame-name enzyme)))
 
@@ -340,20 +336,21 @@ VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide
 ;; Finally, deal with the pathways
 (defun format-pathway-insertion (pathway)
   "Format an INSERT INTO instruction for a pathway."
-  (format nil "INSERT INTO pathway (name) VALUES ('~A');~%"
+  (format nil "INSERT INTO pathway (id) VALUES ('~A');~%"
           (get-frame-name pathway)))
 
 (defun format-pathway-variant (pathway variant)
   "Format an INSERT INTO for a VARIANT pathway of pathway PATHWAY."
-  (insert-into-by-foreign-key "pathway_variant" "pathway" pathway "pathway_id" "pathway" variant "variant_id"))
-
+  (format nil "INSERT INTO pathway_variant (pathway_id, variant_id) VALUES (~A, ~A);"
+          (format-sql-literal (symbol-name (pathway)))
+          (format-sql-literal (symbol-name (variant)))))
 
 (defun format-pathway-variants (pathway variants)
 "Format all INSERT INTO for every VARIANTS of PATHWAY."
   (if (listp variants)
       (format nil "INSERT INTO pathway_variant (pathway_id, variant_id) VALUES ~% ~{~A~^,~%~};~%"
               (loop for variant in variants
-                    collect (format nil "((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM pathway WHERE name = '~A'))"
+                    collect (format nil "('~A', '~A')"
                                     (symbol-name (get-frame-name pathway))
                                     (symbol-name (get-frame-name variant)))))
       (format-pathway-variant pathway variants))) ; variants is a single string
@@ -361,23 +358,16 @@ VALUES ((SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM polypeptide
 
 (defun format-pathway-sub-pathway (pathway subpathway)
   "Format an INSERT INTO instruction for a SUBPATHWAY  of a PATHWAY"
-  (insert-into-by-foreign-key
-   "pathway_sub_pathway"
-   "pathway"
-   "super_pathway_id"
-   (symbol-name (get-frame-name pathway))
-   "pathway"
-   "sub_pathway_id"
-   (symbol-name (get-frame-name subpathway))
-   ))
-
+  (format nil "INSERT INTO pathway_sub_pathway (super_pathway_id, sub_pathway_id) ~% VALUES (~A, ~A);~%"
+          (format-sql-literal (symbol-name (get-frame-name pathway)))
+          (format-sql-literal (symbol-name (get-frame-name subpathway)))))
 
 (defun format-pathway-sub-pathways (pathway sub-pathways)
   "Format all INSERT INTO instruction for SUB-PATHWAYS of a PATHWAY."
   (if (listp sub-pathways)
       (format nil "INSERT INTO pathway_sub_pathway (super_pathway_id, sub_pathway_id) VALUES ~% ~{~A~^,~%~};~%"
               (loop for sub-pathway in sub-pathways
-                    collect (format nil "((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM pathway WHERE name = '~A'))"
+                    collect (format nil "('~A', '~A')"
                                     (get-frame-name pathway)
                                     (get-frame-name sub-pathway))))
       (format-pathway-sub-pathway pathway sub-pathways))) ; sub-pathways is a single string
@@ -396,8 +386,8 @@ It will keep only frame with name starting by TAX-, expected to be a taxonomic I
 (defun format-one-pathway-taxonomic-range-insertion (pathway tax-id)
   "Format an INSERT INTO instruction for a PATHWAY taxonomic range TAX-ID."
   (format nil "INSERT INTO pathway_taxonomic_range (pathway_id, taxon_id) VALUES
-((SELECT id FROM pathway WHERE name = '~A'), ~D);~%"
-          (get-frame-name pathway)
+(~A, ~D);~%"
+          (format-sql-literal (symbol-name (get-frame-name pathway)))
           (format-sql-literal (extract-taxonomic-id-number tax-id))))
 
 (defun format-all-pathway-taxonomic-range-insertion (pathway)
@@ -407,7 +397,9 @@ It will keep only frame with name starting by TAX-, expected to be a taxonomic I
           ((listp tax-id) 
            (format-list-of-lines (loop for id in tax-id
                                        collect (format-one-pathway-taxonomic-range-insertion pathway id))))
-          (t (format-one-pathway-taxonomic-range-insertion pathway tax-id)))))
+          ((numberp tax-id)
+           (format-one-pathway-taxonomic-range-insertion pathway tax-id))
+          (t ""))))
 
 
 (defun format-one-pathway-species-insertion (pathway tax-id)
@@ -415,8 +407,8 @@ It will keep only frame with name starting by TAX-, expected to be a taxonomic I
   (let ((id (extract-taxonomic-id-number tax-id)))
     (if (not (null id))
         (format nil "INSERT INTO pathway_species (pathway_id, species_id) VALUES
-((SELECT id FROM pathway WHERE name = '~A'), ~D);~%"
-                (get-frame-name pathway)
+(~A, ~A);~%"
+                (format-sql-literal (get-frame-name pathway))
                 (format-sql-literal id))
         ""
         )))
@@ -432,15 +424,9 @@ It will keep only frame with name starting by TAX-, expected to be a taxonomic I
 
 (defun format-one-pathway-key-reaction-insertion (pathway-name reaction-name)
   "Format an INSERT INTO instruction for a key reaction REACTION-NAME OF pathway PATHWAY-NAME."
-  (insert-into-by-foreign-key
-   "pathway_key_reaction"
-   "pathway"
-   "pathway_id"
-   pathway-name
-   "reaction"
-   "reaction_id"
-   reaction-name))
-
+ (format nil "INSERT INTO pathway_key_reaction (pathway_id, reaction_id) VALUES (~A, ~A);"
+   (format-sql-literal pathway-name)
+   (format-sql-literal reaction-name)))
 
 (defun format-all-pathway-key-reaction-insertion (pathway)
   "Format all INSERT INTO instructions for key reactions of a PATHWAY."
@@ -482,7 +468,7 @@ It will keep only frame with name starting by TAX-, expected to be a taxonomic I
   "Format one INSERT INTO instruction for a REACTION of a PATHWAY."
   (if (is-reaction reaction)
       (format nil "INSERT INTO pathway_reaction (pathway_id, reaction_id, reaction_direction)
-VALUES ((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM reaction WHERE name = '~A'), ~A);"
+VALUES ('~A', '~A', ~A);"
               (get-frame-name pathway)
               (get-frame-name reaction)
               (format-sql-literal direction))
@@ -498,7 +484,7 @@ VALUES ((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM reaction WHE
            for reaction2 = (cdr edge)
            collect 
     (format nil "INSERT INTO pathway_reaction_graph (pathway_id, predecessor_reaction_id, successor_reaction_id)
-VALUES ((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM reaction WHERE name = '~A'), (SELECT id FROM reaction WHERE name = '~A'));"
+VALUES ('~A', '~A', '~A');"
             (get-frame-name pathway)
             (get-frame-name reaction1)
             (get-frame-name reaction2))))))
@@ -532,7 +518,7 @@ VALUES ((SELECT id FROM pathway WHERE name = '~A'), (SELECT id FROM reaction WHE
 (defun format-pathway-ontology-insertion (pathway path depth pathway-class)
   "Format an INSERT INTO instruction for an PATHWAY-CLASS in the ontology of a PATHWAY."
   (format nil "INSERT INTO pathway_ontology (pathway_id, path, depth, pathway_class)
-VALUES ((SELECT id FROM pathway WHERE name = ~A), ~A, ~A, ~A);"
+VALUES (~A, ~A, ~A, ~A);"
           (format-sql-literal (format-frame pathway))
           (format-sql-literal path)
           (format-sql-literal depth)
@@ -575,7 +561,7 @@ VALUES ((SELECT id FROM pathway WHERE name = ~A), ~A, ~A, ~A);"
 
 (defun format-pathway-variant-group (group-id variant-id)
   (format nil "INSERT INTO pathway_variant_group (variant_group_id, variant_id)
-VALUES (~A, (SELECT id FROM pathway WHERE name = ~A));"
+VALUES (~A, ~A);"
           (format-sql-literal group-id)
           (format-sql-literal (format-frame variant-id))))
 
@@ -593,7 +579,7 @@ VALUES (~A, (SELECT id FROM pathway WHERE name = ~A));"
 (defun dump-pathways ()
   "Dump all pathways."
   (concatenate 'string
-                ;;                         ; First, dump all pathway names
+                ;;                       ; First, dump all pathway names
                 (format-list-of-lines
                  (loop for pathway in (all-pathways)
                        collect (dump-one-pathway pathway)))
@@ -627,7 +613,8 @@ VALUES (~A, (SELECT id FROM pathway WHERE name = ~A));"
               (dump-complexes)
               (dump-reactions)
               (dump-enzymes)
-              (dump-pathways)))
+              (dump-pathways)
+              ))
 
 (defun write-to-file (file content)
   "Write a string CONTENT into a file with filename FILE."
@@ -640,6 +627,5 @@ VALUES (~A, (SELECT id FROM pathway WHERE name = ~A));"
 
 (defun main ()
   (write-to-file "/tmp/dump.sql" (dump-all)))
-
 
 ; (main)
