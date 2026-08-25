@@ -29,29 +29,7 @@ sh metabiantes.sh "dump.sql" "meta"
 
 For the EcoCyc database dump using the same schema, you can replace `"meta"` by `"eco"`, or any other local BioCyc PGDB identifier.
 
-## Option 1. Create a PostgreSQL database with this dump
-
-```console
-sudo -u postgres psql
-```
-
-```sql
-CREATE USER <user> WITH PASSWORD '<secret>';
-CREATE DATABASE metabiantes OWNER <user>;
-```
-
-We consider still being in `./loader` directory.
-Start by initializing the database schema. Note the filename of the schema used here: `create_schema_pg.sql`, specifically tuned for PostgreSQL SQL dialect.
-```console
-psql -U <user> -d metabiantes < ../sql/create_schema_pg.sql
-```
-Then, load the data from the SQL dump.
-
-```console
-psql -U <user> -d metabiantes < ./dump.sql
-```
-
-## Option 2. Create a SQLite database with this dump
+## Create a SQLite database with this dump
 
 Suppose we want to create a metabiantes SQLite database named `metabiantes.db`, we would proceed as follows:
 
