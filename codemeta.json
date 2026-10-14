@@ -1,0 +1,45 @@
+{
+    "@context": "https://w3id.org/codemeta/3.0",
+    "type": "SoftwareSourceCode",
+    "applicationCategory": "Bioinformatique",
+    "author": [
+        {
+            "id": "https://orcid.org/0009-0001-0971-497X",
+            "type": "Person",
+            "affiliation": {
+                "type": "Organization",
+                "name": "LABGeM, Génomique Métabolique, CEA, Genoscope, Institut François Jacob, Université d’Évry, Université Paris-Saclay, CNRS"
+            },
+            "email": "samuel.ortion@genoscope.cns.fr",
+            "familyName": "Ortion",
+            "givenName": "Samuel"
+        },
+        {
+            "type": "Role",
+            "schema:author": "https://orcid.org/0009-0001-0971-497X",
+            "roleName": "Developer",
+            "startDate": "2025-12-19"
+        }
+    ],
+    "codeRepository": "git+https://github.com/labgem/metabiantes.git",
+    "dateCreated": "2025-12-19",
+    "datePublished": "2026-04-13",
+    "description": "A SQL schema and Lisp loader of metabolism data from pathway-tools and MetaCyc",
+    "funder": {
+        "type": "Organization",
+        "name": "French National Research Agency"
+    },
+    "isPartOf": "https://github.com/labgem/pan2met",
+    "keywords": "metabolism",
+    "license": "https://spdx.org/licenses/CECILL-2.1",
+    "name": "metabiantes",
+    "operatingSystem": "Linux",
+    "programmingLanguage": [
+        "Lisp",
+        "SQL"
+    ],
+    "softwareRequirements": "https://pathway-tools.org/",
+    "developmentStatus": "active",
+    "funding": "ANR-20-PAMR-0002",
+    "issueTracker": "https://github.com/labgem/metabiantes/issues"
+}
