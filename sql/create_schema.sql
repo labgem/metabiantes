@@ -177,7 +177,7 @@ CREATE TABLE pathway_species (
     pathway_id TEXT NOT NULL,
     species_id TEXT NOT NULL,
     CONSTRAINT pk_pathway_species PRIMARY KEY (pathway_id, species_id),
-    CONSTRAINT fk_pathway_species_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id),
+    CONSTRAINT fk_pathway_species_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id)
     -- CONSTRAINT fk_pathway_species_species_id FOREIGN KEY (species_id) REFERENCES taxon (id)
 );
 
