@@ -94,12 +94,12 @@
          (symbol-name (get-frame-name frame)))
         ((symbolp frame) (symbol-name frame))
         (t (progn
-           (message (format nil "Error: format-frame: type ~A not handled for frame ~A."
-                            (type-of frame)
-                            frame
-                            ))
-           ()
-           ))))
+             (message (format nil "Error: format-frame: type ~A not handled for frame ~A."
+                              (type-of frame)
+                              frame
+                              ))
+             ()
+             ))))
 
 ;;
 ;; Dump the MetaCyc database
@@ -346,7 +346,7 @@ VALUES ('~A', '~A');"
           (format-sql-literal (symbol-name (variant)))))
 
 (defun format-pathway-variants (pathway variants)
-"Format all INSERT INTO for every VARIANTS of PATHWAY."
+  "Format all INSERT INTO for every VARIANTS of PATHWAY."
   (if (listp variants)
       (format nil "INSERT INTO pathway_variant (pathway_id, variant_id) VALUES ~% ~{~A~^,~%~};~%"
               (loop for variant in variants
@@ -379,8 +379,8 @@ It will keep only frame with name starting by TAX-, expected to be a taxonomic I
     (if (excl:match-regexp "TAX-" taxon)
         (parse-integer
          (replace-regexp taxon
-                    "TAX-"
-                    ""))
+                         "TAX-"
+                         ""))
         nil)))
 
 (defun format-one-pathway-taxonomic-range-insertion (pathway tax-id)
@@ -424,9 +424,9 @@ It will keep only frame with name starting by TAX-, expected to be a taxonomic I
 
 (defun format-one-pathway-key-reaction-insertion (pathway-name reaction-name)
   "Format an INSERT INTO instruction for a key reaction REACTION-NAME OF pathway PATHWAY-NAME."
- (format nil "INSERT INTO pathway_key_reaction (pathway_id, reaction_id) VALUES (~A, ~A);"
-   (format-sql-literal pathway-name)
-   (format-sql-literal reaction-name)))
+  (format nil "INSERT INTO pathway_key_reaction (pathway_id, reaction_id) VALUES (~A, ~A);"
+          (format-sql-literal pathway-name)
+          (format-sql-literal reaction-name)))
 
 (defun format-all-pathway-key-reaction-insertion (pathway)
   "Format all INSERT INTO instructions for key reactions of a PATHWAY."
@@ -435,9 +435,9 @@ It will keep only frame with name starting by TAX-, expected to be a taxonomic I
           ((listp key-reactions) (format-list-of-lines
                                   (loop for reaction in key-reactions
                                         when (not (equal 'cons (type-of reaction))) ; ignore cons type
-                                        collect (format-one-pathway-key-reaction-insertion
-                                                 (format-frame pathway)
-                                                 (format-frame reaction)))))
+                                          collect (format-one-pathway-key-reaction-insertion
+                                                   (format-frame pathway)
+                                                   (format-frame reaction)))))
           (t (format-one-pathway-key-reaction-insertion
               (format-frame pathway)
               (format-frame key-reactions))))))
@@ -483,11 +483,11 @@ VALUES ('~A', '~A', ~A);"
            for reaction1 = (car edge)
            for reaction2 = (cdr edge)
            collect 
-    (format nil "INSERT INTO pathway_reaction_graph (pathway_id, predecessor_reaction_id, successor_reaction_id)
+           (format nil "INSERT INTO pathway_reaction_graph (pathway_id, predecessor_reaction_id, successor_reaction_id)
 VALUES ('~A', '~A', '~A');"
-            (get-frame-name pathway)
-            (get-frame-name reaction1)
-            (get-frame-name reaction2))))))
+                   (get-frame-name pathway)
+                   (get-frame-name reaction1)
+                   (get-frame-name reaction2))))))
 
 (defun format-pathway-reactions-insertion (pathway)
   "Format all pathway reactions insertion of PATHWAY."
@@ -550,13 +550,13 @@ VALUES (~A, ~A, ~A, ~A);"
                    (setq group-count (+ 1 group-count))
                    (setq variant-group group-count))
                  (loop for variant in (variants-of-pathway pathway)
-                           do (progn
-                                (setf (gethash variant variant-to-variant-group) variant-group) ; associate this variant to the variant-group
-                                (setf (gethash variant-group variant-group-to-variants)
-                                      (cons variant (gethash variant-group variant-group-to-variants))) ; append the variant to the variant group
-                        ))
-                     ))
-              )
+                       do (progn
+                            (setf (gethash variant variant-to-variant-group) variant-group) ; associate this variant to the variant-group
+                            (setf (gethash variant-group variant-group-to-variants)
+                                  (cons variant (gethash variant-group variant-group-to-variants))) ; append the variant to the variant group
+                            ))
+                 ))
+          )
     variant-group-to-variants))
 
 (defun format-pathway-variant-group (group-id variant-id)
@@ -579,14 +579,14 @@ VALUES (~A, ~A);"
 (defun dump-pathways ()
   "Dump all pathways."
   (concatenate 'string
-                ;;                       ; First, dump all pathway names
-                (format-list-of-lines
-                 (loop for pathway in (all-pathways)
-                       collect (dump-one-pathway pathway)))
-                                         ; Then, dump all pathway variants
-                (format-list-of-lines
-                 (loop for pathway in (all-pathways)
-                       for variants = (variants-of-pathway pathway)
+               ;;                       ; First, dump all pathway names
+               (format-list-of-lines
+                (loop for pathway in (all-pathways)
+                      collect (dump-one-pathway pathway)))
+                                        ; Then, dump all pathway variants
+               (format-list-of-lines
+                (loop for pathway in (all-pathways)
+                      for variants = (variants-of-pathway pathway)
                       when (not (null variants))
                         collect (format-pathway-variants pathway variants)))
                                         ; An alternative way of representing a pathway variant, as a pathway variant group
@@ -601,20 +601,56 @@ VALUES (~A, ~A);"
                                         ; Finally, dump all pathway flattened ontology dags
                (format-list-of-lines
                 (loop for pathway in (all-pathways)
-                     collect (dump-pathway-ontology pathway)))
+                      collect (dump-pathway-ontology pathway)))
+               ))
+
+
+;; Handle the saving of frame names into a SQL table <frame_type>_name_synonyms
+
+(defun format-insert-into-synonym (frame-type-name frame-id name)
+  "Format a SQL insertion of a name for a synonym for a frame"
+  (format nil "INSERT INTO ~A_name_synonyms (~A_id, name) VALUES (~A, ~A);"
+          frame-type-name
+          frame-type-name
+          (format-sql-literal frame-id)
+          (format-sql-literal name)))
+
+(defun format-all-insert-into-synonym (frame-type-name frame)
+  "Dump all synonyms of a frame"
+  (format-list-of-lines
+   (loop for name in (get-slot-values frame 'names)
+         collect (format-insert-into-synonym
+                  frame-type-name frame name))))
+
+
+(defun dump-synonyms-of-list (frame-type-name list)
+  (format-list-of-lines
+   (loop for frame in list
+         collect (format-all-insert-into-synonym frame-type-name frame))))
+
+(defun dump-synonyms ()
+  "Dump all synonyms of frames of various types"
+                                        ; substrates
+  (concatenate 'string
+               (dump-synonyms-of-list "substrate" (all-substrates (all-rxns :all)))               
+               (dump-synonyms-of-list "compound" (all-compounds))
+               (dump-synonyms-of-list "pathway" (all-pathways))
+               (dump-synonyms-of-list "polypeptide" (all-polypeptides))
+               (dump-synonyms-of-list "reaction" (all-rxns :all))       
                ))
 
 (defun dump-all ()
   "Dump all MetaCyc database as SQL (according to the schema having effectively only a selected subset of the information)."
   (concatenate 'string
-              (dump-substrates)
-              (dump-compounds)
-              (dump-polypeptides)
-              (dump-complexes)
-              (dump-reactions)
-              (dump-enzymes)
-              (dump-pathways)
-              ))
+               (dump-substrates)
+               (dump-compounds)
+               (dump-polypeptides)
+               (dump-complexes)
+               (dump-reactions)
+               (dump-enzymes)
+               (dump-pathways)
+               (dump-synonyms)
+               ))
 
 (defun write-to-file (file content)
   "Write a string CONTENT into a file with filename FILE."
@@ -628,4 +664,4 @@ VALUES (~A, ~A);"
 (defun main ()
   (write-to-file "/tmp/dump.sql" (dump-all)))
 
-; (main)
+                                        ; (main)

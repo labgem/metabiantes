@@ -21,7 +21,7 @@ CREATE TABLE compound (
     CONSTRAINT pk_compound PRIMARY KEY (id)
 );
 
-CREATE TABLE compound_name_synonymes (
+CREATE TABLE compound_name_synonyms (
     compound_id TEXT NOT NULL,
     name TEXT NOT NULL,
     CONSTRAINT pk_compound_name PRIMARY KEY (compound_id, name),
@@ -42,7 +42,7 @@ CREATE TABLE reaction (
     CONSTRAINT pk_reaction PRIMARY KEY (id)
 );
 
-CREATE TABLE reaction_name (
+CREATE TABLE reaction_name_synonyms (
     reaction_id TEXT NOT NULL,
     name TEXT NOT NULL,
     CONSTRAINT pk_reaction_name PRIMARY KEY (reaction_id, name),
@@ -56,6 +56,7 @@ CREATE TABLE reaction_species (
     CONSTRAINT fk_reaction_species_reaction_id FOREIGN KEY (reaction_id) REFERENCES reaction (id)
 );
 
+
 CREATE TABLE reaction_substrate (
     reaction_id TEXT NOT NULL,  
     substrate_id TEXT NOT NULL,
@@ -63,7 +64,7 @@ CREATE TABLE reaction_substrate (
     reaction_side TEXT, -- 'left' or 'right'
     CONSTRAINT pk_reaction_substrate PRIMARY KEY (reaction_id, substrate_id, reaction_side),
     CONSTRAINT fk_reaction_substrate_reaction_id FOREIGN KEY (reaction_id) REFERENCES reaction (id),
-    CONSTRAINT fk_reaction_substrate_substrate_id FOREIGN KEY (substrate_id) REFERENCES chemical (id)
+    CONSTRAINT fk_reaction_substrate_substrate_id FOREIGN KEY (substrate_id) REFERENCES substrate (id)
 );
 
 CREATE TABLE polypeptide (
@@ -79,6 +80,13 @@ CREATE TABLE polypeptide (
     atom_charges INTEGER,
     isoelectric_point FLOAT,
     CONSTRAINT pk_polypeptide PRIMARY KEY (id)
+);
+
+CREATE TABLE polypeptide_name_synonyms (
+    polypeptide_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    CONSTRAINT pk_polypeptide_name PRIMARY KEY (polypeptide_id, name),
+    CONSTRAINT fk_polypeptide_name_polypeptide_id FOREIGN KEY (polypeptide_id) REFERENCES polypeptide (id)
 );
 
 CREATE TABLE polypeptide_complex_component (
@@ -105,7 +113,7 @@ CREATE TABLE pathway (
 );
 
 
-CREATE TABLE pathway_name_synonymes (
+CREATE TABLE pathway_name_synonyms (
     pathway_id TEXT NOT NULL,
     name TEXT NOT NULL,
     CONSTRAINT pk_pathway_name PRIMARY KEY (pathway_id, name),
@@ -170,7 +178,7 @@ CREATE TABLE pathway_species (
     species_id TEXT NOT NULL,
     CONSTRAINT pk_pathway_species PRIMARY KEY (pathway_id, species_id),
     CONSTRAINT fk_pathway_species_pathway_id FOREIGN KEY (pathway_id) REFERENCES pathway (id),
-    CONSTRAINT fk_pathway_species_species_id FOREIGN KEY (species_id) REFERENCES taxon (id)
+    -- CONSTRAINT fk_pathway_species_species_id FOREIGN KEY (species_id) REFERENCES taxon (id)
 );
 
 CREATE TABLE pathway_taxonomic_range (
