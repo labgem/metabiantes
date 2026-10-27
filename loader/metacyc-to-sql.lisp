@@ -336,8 +336,9 @@ VALUES ('~A', '~A');"
 ;; Finally, deal with the pathways
 (defun format-pathway-insertion (pathway)
   "Format an INSERT INTO instruction for a pathway."
-  (format nil "INSERT INTO pathway (id) VALUES ('~A');~%"
-          (get-frame-name pathway)))
+  (format nil "INSERT INTO pathway (id, comment) VALUES (~A, ~A);~%"
+          (format-sql-literal pathway)
+          (format-sql-literal (get-slot-value pathway 'comment))))
 
 (defun format-pathway-variant (pathway variant)
   "Format an INSERT INTO for a VARIANT pathway of pathway PATHWAY."
