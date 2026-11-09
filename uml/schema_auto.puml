@@ -1,0 +1,178 @@
+@startuml
+hide circle
+skinparam linetype ortho
+
+entity "substrate" as substrate {
+  * id : text <<PK>>
+}
+
+entity "compound" as compound {
+  * id : text <<PK>>
+  --
+  type : text
+  comment : text
+  atomic_number : integer
+  atom_charges : integer
+  molecular_weight : float
+  monoisotopic_mw : float
+  smiles : text
+  gibbs_free_energy : float
+}
+
+entity "compound_name_synonymes" as compound_name_synonymes {
+  * compound_id : text <<PK>>
+  * name : text <<PK>>
+}
+
+entity "reaction" as reaction {
+  * id : text <<PK>>
+  --
+  type : text
+  comment : text
+  ec_number : text
+  spontaneous : boolean
+  gibbs_free_energy : float
+  physiologically_relevant : boolean
+  reaction_balance_status : boolean
+  reaction_physiological_direction : text
+}
+
+entity "reaction_name" as reaction_name {
+  * reaction_id : text <<PK>>
+  * name : text <<PK>>
+}
+
+entity "reaction_species" as reaction_species {
+  * reaction_id : text <<PK>>
+  * species_id : text <<PK>>
+}
+
+entity "reaction_substrate" as reaction_substrate {
+  * reaction_id : text <<PK>>
+  * substrate_id : text <<PK>>
+  * reaction_side : text <<PK>>
+  --
+  stoechiometry : integer
+}
+
+entity "polypeptide" as polypeptide {
+  * id : text <<PK>>
+  --
+  type : text
+  comment : text
+  experimental_molecular_weight : float
+  molecular_weight : float
+  molecular_weight_sequence : float
+  half_life : float
+  gene : text
+  neidhardt_spot_number : integer
+  atom_charges : integer
+  isoelectric_point : float
+}
+
+entity "polypeptide_complex_component" as polypeptide_complex_component {
+  * complex_id : text <<PK>>
+  * component_id : text <<PK>>
+  --
+  coefficient : integer
+}
+
+entity "reaction_enzyme" as reaction_enzyme {
+  * reaction_id : text <<PK>>
+  * enzyme_id : text <<PK>>
+}
+
+entity "pathway" as pathway {
+  * id : text <<PK>>
+  --
+  comment : text
+}
+
+entity "pathway_name_synonymes" as pathway_name_synonymes {
+  * pathway_id : text <<PK>>
+  * name : text <<PK>>
+}
+
+entity "pathway_sub_pathway" as pathway_sub_pathway {
+  * super_pathway_id : text <<PK>>
+  * sub_pathway_id : text <<PK>>
+}
+
+entity "pathway_reaction_graph" as pathway_reaction_graph {
+  * id : integer <<PK>>
+  --
+  pathway_id : text <<FK>>
+  predecessor_reaction_id : text <<FK>>
+  successor_reaction_id : text <<FK>>
+}
+
+entity "pathway_reaction" as pathway_reaction {
+  * id : integer <<PK>>
+  --
+  pathway_id : text <<FK>>
+  reaction_id : text <<FK>>
+  reaction_direction : text
+}
+
+entity "pathway_key_reaction" as pathway_key_reaction {
+  * pathway_id : text <<PK>>
+  * reaction_id : text <<PK>>
+}
+
+entity "pathway_species" as pathway_species {
+  * pathway_id : text <<PK>>
+  * species_id : text <<PK>>
+}
+
+entity "pathway_variant" as pathway_variant {
+  * pathway_id : text <<PK>>
+  * variant_id : text <<PK>>
+}
+
+entity "pathway_variant_group" as pathway_variant_group {
+  * id : integer <<PK>>
+  --
+  variant_group_id : text
+  variant_id : text <<FK>>
+}
+
+entity "pathway_ontology" as pathway_ontology {
+  * id : integer <<PK>>
+  --
+  pathway_id : text <<FK>>
+  path : integer
+  depth : integer
+  pathway_class : text
+}
+
+entity "pathway_taxonomic_range" as pathway_taxonomic_range {
+  * pathway_id : text <<PK>>
+  * taxon_id : text <<PK>>
+}
+
+compound ||--o{ compound_name_synonymes
+reaction ||--o{ reaction_name
+reaction ||--o{ reaction_species
+reaction ||--o{ reaction_substrate
+substrate ||--o{ reaction_substrate
+polypeptide ||--o{ polypeptide_complex_component
+polypeptide ||--o{ polypeptide_complex_component
+reaction ||--o{ reaction_enzyme
+polypeptide ||--o{ reaction_enzyme
+pathway ||--o{ pathway_name_synonymes
+pathway ||--o{ pathway_sub_pathway
+pathway ||--o{ pathway_sub_pathway
+pathway ||--o{ pathway_reaction_graph
+reaction ||--o{ pathway_reaction_graph
+reaction ||--o{ pathway_reaction_graph
+pathway ||--o{ pathway_reaction
+reaction ||--o{ pathway_reaction
+pathway ||--o{ pathway_key_reaction
+reaction ||--o{ pathway_key_reaction
+pathway ||--o{ pathway_species
+pathway ||--o{ pathway_taxonomic_range
+pathway ||--o{ pathway_variant
+pathway ||--o{ pathway_variant
+pathway ||--o{ pathway_variant_group
+pathway ||--o{ pathway_ontology
+@enduml
