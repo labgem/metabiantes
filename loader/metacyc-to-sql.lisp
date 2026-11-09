@@ -266,30 +266,34 @@ VALUES (~A, ~A, ~A, ~A, ~A, ~A, ~A, ~A, ~A);~%"
           (format-sql-boolean (get-slot-value reaction 'reaction-balance-status))
           (format-sql-literal (format-reaction-physiological-direction (get-slot-value reaction 'reaction-direction)))))
 
-(defun format-one-reaction-substrate-insertion (reaction substrate side)
+(defun format-one-reaction-substrate-insertion (reaction substrate side stoechiometry)
   "Format an INSERT INTO instruction for the SUBSTRATE of a REACTION, on reaction side (LEFT or RIGHT)."
-  (format nil "INSERT INTO reaction_substrate (reaction_id, substrate_id, reaction_side) VALUES
-('~A', '~A', '~A');~%"
-          (get-frame-name reaction)
-          (format-frame substrate)
-          side
+  (format nil "INSERT INTO reaction_substrate (reaction_id, substrate_id, reaction_side, stoechiometry) VALUES
+(~A, ~A, ~A, ~A);~%"
+          (format-sql-literal reaction)
+          (format-sql-literal substrate)
+          (format-sql-literal side)
+          (format-sql-literal stoechiometry)
           ))
 
 
 (defun format-reaction-substrate-insertion (reaction direction)
   "Format an INSERT INTO instruction for "
-  (let ((substrates (get-slot-value reaction direction)))
+  (let ((substrates (get-slot-values reaction direction)))
     (if (listp substrates)
         (format-list-of-lines
          (loop for substrate in substrates
+               for stoechiometry = (get-coefficient reaction direction substrate)
                collect (format-one-reaction-substrate-insertion
                         reaction
                         substrate
-                        direction)))
+                        direction
+                        stoechiometry)))
         (format-one-reaction-substrate-insertion
          reaction
          substrates
-         direction))))
+         direction
+         stoechiometry))))
 
 
 (defun reaction-substrate-insertion (reaction)
